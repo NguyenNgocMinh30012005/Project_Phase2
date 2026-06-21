@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Loader2, Play } from "lucide-react";
-import { submitTryOn } from "./lib/api";
+import { Loader2, Play, X } from "lucide-react";
+import { cancelTryOnJob, getTryOnJob, submitTryOn } from "./lib/api";
 import { ResultViewer } from "./components/ResultViewer";
 import { TryOnPreview } from "./components/TryOnPreview";
 import { UploadGarment } from "./components/UploadGarment";
@@ -27,9 +27,16 @@ function App() {
       form.append("prompt", state.prompt);
       form.append("use_refiner", String(state.useRefiner));
       form.append("repair_mode", String(state.repairMode));
-      const result = await submitTryOn(form);
+      form.append("run_mode", state.runMode);
+      let result = await submitTryOn(form);
       setField("result", result);
       setField("jobId", result.job_id);
+      while (result.status === "queued" || result.status === "running") {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        result = await getTryOnJob(result.job_id);
+        setField("result", result);
+        setField("jobId", result.job_id);
+      }
       if (result.error) setField("error", result.error);
     } catch (error) {
       setField("error", error instanceof Error ? error.message : String(error));
@@ -37,6 +44,21 @@ function App() {
       setField("loading", false);
     }
   }
+
+  async function cancelJob() {
+    if (!state.jobId) return;
+    try {
+      const result = await cancelTryOnJob(state.jobId);
+      setField("result", result);
+      if (result.error) setField("error", result.error);
+    } catch (error) {
+      setField("error", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const canCancel = Boolean(
+    state.loading && state.jobId && (state.result?.status === "queued" || state.result?.status === "running")
+  );
 
   return (
     <main className="app-shell">
@@ -50,6 +72,12 @@ function App() {
             {state.loading ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
             Generate
           </button>
+          {canCancel && (
+            <button className="secondary-button" type="button" onClick={cancelJob}>
+              <X size={18} />
+              Cancel
+            </button>
+          )}
         </div>
 
         <div className="input-grid">
@@ -66,6 +94,13 @@ function App() {
             <label><input type="checkbox" checked={state.useRefiner} onChange={(e) => setField("useRefiner", e.target.checked)} /> FLUX refine</label>
             <label><input type="checkbox" checked={state.repairMode} onChange={(e) => setField("repairMode", e.target.checked)} /> Repair</label>
             <label><input type="checkbox" checked={state.showDebug} onChange={(e) => setField("showDebug", e.target.checked)} /> Debug</label>
+            <label>
+              <span>Mode</span>
+              <select value={state.runMode} onChange={(e) => setField("runMode", e.target.value as "sync" | "async")}>
+                <option value="sync">Sync</option>
+                <option value="async">Async</option>
+              </select>
+            </label>
           </div>
         </div>
 

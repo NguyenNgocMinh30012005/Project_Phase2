@@ -1,0 +1,20 @@
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY virtual_tryon/backend/requirements.txt /app/virtual_tryon/backend/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /app/virtual_tryon/backend/requirements.txt
+
+COPY virtual_tryon/backend /app/virtual_tryon/backend
+COPY virtual_tryon/configs /app/virtual_tryon/configs
+COPY virtual_tryon/scripts /app/virtual_tryon/scripts
+
+WORKDIR /app/virtual_tryon/backend
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

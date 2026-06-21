@@ -226,6 +226,16 @@ class TryOnPipeline:
             result_url=self.storage.public_url(result_path),
             debug=DebugUrls(
                 mask_url=self.storage.public_url(job_dir / "mask_preview.png"),
+                mask_urls=[
+                    url
+                    for url in [
+                        self.storage.public_url(job_dir / "mask_preview.png"),
+                        self.storage.public_url(job_dir / "garment_refine_mask_overlay.png"),
+                        self.storage.public_url(job_dir / "boundary_refine_mask_overlay.png"),
+                        self.storage.public_url(job_dir / "safe_refine_mask_overlay.png"),
+                    ]
+                    if url
+                ],
                 agnostic_url=self.storage.public_url(job_dir / "agnostic.png"),
                 core_output_url=self.storage.public_url(core_path),
                 refined_output_url=self.storage.public_url(refined_path),

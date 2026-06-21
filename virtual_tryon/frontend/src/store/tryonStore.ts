@@ -10,9 +10,12 @@ export type TryOnResult = {
   seed?: number | null;
   debug?: {
     mask_url?: string | null;
+    mask_urls?: string[];
     agnostic_url?: string | null;
     core_output_url?: string | null;
     refined_output_url?: string | null;
+    quality_report_url?: string | null;
+    refine_mask_url?: string | null;
   };
   quality?: {
     needs_refine: boolean;
@@ -32,6 +35,7 @@ type TryOnState = {
   prompt: string;
   useRefiner: boolean;
   repairMode: boolean;
+  runMode: "sync" | "async";
   showDebug: boolean;
   loading: boolean;
   jobId?: string;
@@ -46,6 +50,7 @@ export const useTryOnStore = create<TryOnState>((set) => ({
   prompt: "",
   useRefiner: true,
   repairMode: true,
+  runMode: "sync",
   showDebug: true,
   loading: false,
   setField: (key, value) => set({ [key]: value } as Partial<TryOnState>),

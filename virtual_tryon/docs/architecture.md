@@ -38,6 +38,12 @@ person image + garment image + category + prompt
 
 Benchmark orchestration runs the same pipeline in separate job folders for `idm`, `idm_flux`, and `repair`, and treats `catvton` and `klein_lora` as optional baseline engines. Unavailable baselines are recorded as skipped rows; they do not affect the default IDM-VTON API path.
 
+## API Runtime
+
+The backend serves generated files through `/artifacts/{job_id}/...`, mapped only to `data/outputs`. Path traversal and files outside outputs return 404.
+
+`POST /tryon` supports sync and async modes. Sync runs the job before responding. Async writes `job.json`, returns `queued`, runs the pipeline in a FastAPI background task, and serializes GPU work with a local lock so concurrent requests do not start multiple IDM-VTON subprocesses.
+
 ## Engine Contract
 
 All core engines implement:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 
 from app.core.config import get_settings
 from app.engines.factory import create_refiner
@@ -30,6 +30,7 @@ async def _read_upload(file: UploadFile | None):
 @router.post("/tryon", response_model=TryOnStatusResponse)
 async def create_tryon(
     person_image: Annotated[UploadFile, File(...)],
+    background_tasks: BackgroundTasks,
     garment_top: Annotated[UploadFile | None, File()] = None,
     garment_bottom: Annotated[UploadFile | None, File()] = None,
     garment_dress: Annotated[UploadFile | None, File()] = None,
@@ -37,6 +38,7 @@ async def create_tryon(
     prompt: Annotated[str | None, Form()] = None,
     use_refiner: Annotated[bool, Form()] = True,
     repair_mode: Annotated[bool, Form()] = True,
+    run_mode: Annotated[str | None, Form()] = None,
     seed: Annotated[int | None, Form()] = None,
 ) -> TryOnStatusResponse:
     if not any([garment_top, garment_bottom, garment_dress]):
@@ -64,12 +66,28 @@ async def create_tryon(
         repair_mode=repair_mode,
         seed=seed,
     )
+    settings = get_settings()
+    selected_run_mode = (run_mode or settings.api.run_mode).lower()
+    if selected_run_mode not in {"sync", "async"}:
+        raise HTTPException(status_code=400, detail="run_mode must be 'sync' or 'async'.")
+    if selected_run_mode == "async":
+        queued = job_service.queue_tryon_job(request)
+        background_tasks.add_task(job_service.run_queued_job, request)
+        return queued
     return job_service.create_tryon_job(request)
 
 
 @router.get("/tryon/{job_id}", response_model=TryOnStatusResponse)
 def get_tryon(job_id: str) -> TryOnStatusResponse:
     job = get_job_service().get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    return job
+
+
+@router.delete("/tryon/{job_id}", response_model=TryOnStatusResponse)
+def cancel_tryon(job_id: str) -> TryOnStatusResponse:
+    job = get_job_service().cancel_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
     return job

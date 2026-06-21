@@ -11,6 +11,7 @@ JobStatus = Literal["queued", "running", "completed", "failed"]
 
 class DebugUrls(BaseModel):
     mask_url: str | None = None
+    mask_urls: list[str] = Field(default_factory=list)
     agnostic_url: str | None = None
     core_output_url: str | None = None
     refined_output_url: str | None = None
@@ -39,7 +40,11 @@ class TryOnResponse(BaseModel):
 
 class TryOnStatusResponse(TryOnResponse):
     created_at: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
     updated_at: str | None = None
+    cancel_requested: bool = False
+    engine_status: dict[str, str] = Field(default_factory=dict)
 
 
 class HealthResponse(BaseModel):

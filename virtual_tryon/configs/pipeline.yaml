@@ -5,6 +5,11 @@ quality:
   garment_change_threshold: 0.04
   artifact_threshold: 0.35
 
+api:
+  run_mode: "sync"
+  job_poll_interval_seconds: 2
+  max_job_runtime_seconds: 900
+
 refinement:
   enabled: true
   mask_mode: "safe"

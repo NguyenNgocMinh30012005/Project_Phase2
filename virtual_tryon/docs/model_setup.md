@@ -42,6 +42,7 @@ bash scripts/download_idm_vton_ckpt.sh
 ## Token And Model Safety
 
 - Never commit Hugging Face tokens, `.env` files, shell history, checkpoints, model weights, generated outputs, or third-party source mirrors.
+- Never expose model or checkpoint folders through HTTP; only `data/outputs` is served at `/artifacts`.
 - Keep `HF_TOKEN` in the shell environment only for the current session, or use the Hugging Face CLI login cache outside the repository.
 - If a token is pasted into a chat, terminal transcript, issue, or any external system, revoke or rotate it in Hugging Face settings before continuing production work.
 - `.gitignore` must keep `virtual_tryon/models/`, `virtual_tryon/data/outputs/`, `virtual_tryon/data/temp/`, and `virtual_tryon/third_party/` out of Git.

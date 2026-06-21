@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
+from app.api.routes_artifacts import router as artifacts_router
 from app.api.routes_health import router as health_router
 from app.api.routes_tryon import router as tryon_router
 from app.core.config import get_settings
@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 settings.storage.outputs_dir.mkdir(parents=True, exist_ok=True)
-app.mount(settings.storage.public_outputs_prefix, StaticFiles(directory=settings.storage.outputs_dir), name="outputs")
 
+app.include_router(artifacts_router)
 app.include_router(health_router)
 app.include_router(tryon_router)

@@ -28,8 +28,8 @@ On RunPod, use the prepared environment:
 
 ```bash
 source /workspace/Project_Phase2/env.sh
-cd /workspace/Project_Phase2/virtual_tryon/backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd /workspace/Project_Phase2/virtual_tryon
+bash scripts/run_backend.sh
 ```
 
 ## API
@@ -56,6 +56,13 @@ Outputs are saved under:
 
 ```text
 virtual_tryon/data/outputs/{job_id}/
+```
+
+Artifacts are served by the backend under:
+
+```text
+/artifacts/{job_id}/result.png
+/artifacts/{job_id}/quality_report.json
 ```
 
 ## CLI
@@ -131,13 +138,32 @@ IDM-VTON remains the default core engine. FLUX is an optional refiner with core-
 ```bash
 cd virtual_tryon/frontend
 npm install
-npm run dev
+npm run build
+npm run dev -- --host 0.0.0.0
 ```
 
 Set the backend URL if needed:
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Run the full demo in two terminals:
+
+```bash
+cd virtual_tryon
+bash scripts/run_backend.sh
+VITE_API_BASE_URL=http://127.0.0.1:8000 bash scripts/run_frontend.sh
+```
+
+E2E smoke test:
+
+```bash
+python scripts/e2e_smoke_test.py \
+  --api-base http://127.0.0.1:8000 \
+  --sample data/eval_set/sample_001 \
+  --use-refiner false \
+  --timeout 900
 ```
 
 ## Tests

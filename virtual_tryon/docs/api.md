@@ -30,6 +30,7 @@ Multipart form fields:
 - `prompt`: optional text.
 - `use_refiner`: boolean, default `true`.
 - `repair_mode`: boolean, default `true`.
+- `run_mode`: optional `sync` or `async`; defaults to `configs/pipeline.yaml`.
 - `seed`: optional integer.
 
 Response:
@@ -38,18 +39,32 @@ Response:
 {
   "job_id": "abc",
   "status": "completed",
-  "result_url": "/outputs/abc/result.png",
+  "result_url": "/artifacts/abc/result.png",
   "debug": {
-    "mask_url": "/outputs/abc/mask_preview.png",
-    "agnostic_url": "/outputs/abc/agnostic.png",
-    "core_output_url": "/outputs/abc/core_output.png",
-    "refined_output_url": "/outputs/abc/refined_output.png",
-    "quality_report_url": "/outputs/abc/quality_report.json",
-    "refine_mask_url": "/outputs/abc/safe_refine_mask_overlay.png"
+    "mask_url": "/artifacts/abc/mask_preview.png",
+    "mask_urls": ["/artifacts/abc/mask_preview.png"],
+    "agnostic_url": "/artifacts/abc/agnostic.png",
+    "core_output_url": "/artifacts/abc/core_output.png",
+    "refined_output_url": "/artifacts/abc/refined_output.png",
+    "quality_report_url": "/artifacts/abc/quality_report.json",
+    "refine_mask_url": "/artifacts/abc/safe_refine_mask_overlay.png"
   },
   "seed": 123
 }
 ```
+
+When `run_mode=async`, `POST /tryon` returns quickly:
+
+```json
+{
+  "job_id": "abc",
+  "status": "queued",
+  "result_url": null,
+  "debug": {}
+}
+```
+
+Poll `GET /tryon/{job_id}` until `completed` or `failed`.
 
 If the core model is missing, the job returns `status: failed` and a clear `error` string.
 
@@ -74,6 +89,18 @@ idm_vton_stderr.txt
 
 `quality_report.json` includes `engine_status`, `final_choice`, and `final_choice_reason`. For model comparison across CatVTON/Klein baselines, use `scripts/benchmark_pipeline.py` instead of the default `/tryon` API.
 
+## GET /artifacts/{path}
+
+Serves files under `data/outputs` only:
+
+```text
+/artifacts/{job_id}/result.png
+/artifacts/{job_id}/core_output.png
+/artifacts/{job_id}/quality_report.json
+```
+
+Path traversal and files outside `data/outputs` return clean 404 responses. Models, checkpoints, `third_party`, `.env`, and tokens are never served by this route.
+
 Example missing-model response:
 
 ```json
@@ -87,7 +114,17 @@ Example missing-model response:
 
 ## GET /tryon/{job_id}
 
-Returns the stored job status for the current API process.
+Returns the stored job status. Job metadata is also written to:
+
+```text
+data/outputs/{job_id}/job.json
+```
+
+`job.json` includes `queued`, `running`, `completed`, or `failed`, timestamps, clean error text, result URL, debug URLs, and engine status.
+
+## DELETE /tryon/{job_id}
+
+Cancels a queued job. Running jobs are marked with `cancel_requested`; the current local executor does not kill an active IDM-VTON subprocess.
 
 ## POST /tryon/refine
 

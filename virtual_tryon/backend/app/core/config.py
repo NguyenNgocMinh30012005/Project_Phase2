@@ -15,7 +15,7 @@ class StorageConfig(BaseModel):
     inputs_dir: Path
     outputs_dir: Path
     temp_dir: Path
-    public_outputs_prefix: str = "/outputs"
+    public_outputs_prefix: str = "/artifacts"
 
 
 class ImageConfig(BaseModel):
@@ -37,6 +37,12 @@ class PipelineConfig(BaseModel):
     allow_mock_engine: bool = False
     save_intermediates: bool = True
     fail_on_missing_core_model: bool = True
+
+
+class ApiConfig(BaseModel):
+    run_mode: str = "sync"
+    job_poll_interval_seconds: int = 2
+    max_job_runtime_seconds: int = 900
 
 
 class ModelRuntimeConfig(BaseModel):
@@ -108,6 +114,7 @@ class Settings(BaseModel):
     image: ImageConfig
     preprocessing: PreprocessingConfig
     pipeline: PipelineConfig
+    api: ApiConfig
     runtime: ModelRuntimeConfig
     idm_vton: EngineConfig
     flux_refiner: EngineConfig
@@ -158,6 +165,10 @@ def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     if allow_mock is not None:
         config.setdefault("pipeline", {})["allow_mock_engine"] = allow_mock.lower() in {"1", "true", "yes", "on"}
 
+    api_run_mode = os.getenv("TRYON_API_RUN_MODE")
+    if api_run_mode:
+        config.setdefault("api", {})["run_mode"] = api_run_mode
+
     device = os.getenv("TRYON_DEVICE")
     if device:
         config["device"] = device
@@ -178,6 +189,7 @@ def load_settings() -> Settings:
         image=ImageConfig(**config.get("image", {})),
         preprocessing=PreprocessingConfig(**config.get("preprocessing", {})),
         pipeline=PipelineConfig(**config.get("pipeline", {})),
+        api=ApiConfig(**config.get("api", {})),
         runtime=ModelRuntimeConfig(device=config.get("device", "cuda"), precision=config.get("precision", "bf16")),
         idm_vton=EngineConfig(**config.get("idm_vton", {})),
         flux_refiner=EngineConfig(**config.get("flux_refiner", {})),

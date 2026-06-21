@@ -20,7 +20,7 @@ def get_tryon_pipeline() -> TryOnPipeline:
 
 @lru_cache(maxsize=1)
 def get_job_service() -> JobService:
-    return JobService(get_tryon_pipeline())
+    return JobService(get_tryon_pipeline(), get_storage_service())
 
 
 def clear_container_cache() -> None:

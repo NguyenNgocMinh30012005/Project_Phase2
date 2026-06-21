@@ -55,6 +55,7 @@ figcaption,
 }
 
 .primary-button,
+.secondary-button,
 .icon-button {
   border: 1px solid #0a6b55;
   background: #0a6b55;
@@ -67,6 +68,12 @@ figcaption,
   gap: 8px;
   padding: 0 14px;
   cursor: pointer;
+}
+
+.secondary-button {
+  border-color: #7f1d1d;
+  background: #fff;
+  color: #7f1d1d;
 }
 
 .primary-button:disabled {
@@ -198,6 +205,14 @@ textarea {
   gap: 8px;
 }
 
+.switches select {
+  width: 100%;
+  border: 1px solid #c9d1ce;
+  border-radius: 6px;
+  background: #fff;
+  padding: 6px 8px;
+}
+
 .preview-grid {
   margin-top: 14px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -291,6 +306,25 @@ textarea {
   background: #fff;
   padding: 6px 10px;
   font-size: 12px;
+}
+
+.artifact-link {
+  display: inline-flex;
+  margin-top: 12px;
+  color: #0a6b55;
+  font-size: 13px;
+}
+
+.quality-json {
+  margin-top: 10px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #c9d1ce;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 
 .spin {

@@ -7,7 +7,7 @@ storage:
   inputs_dir: "data/inputs"
   outputs_dir: "data/outputs"
   temp_dir: "data/temp"
-  public_outputs_prefix: "/outputs"
+  public_outputs_prefix: "/artifacts"
 
 image:
   max_side: 1536

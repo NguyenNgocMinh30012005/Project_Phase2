@@ -87,3 +87,9 @@ python scripts/build_review_gallery.py \
 ```
 
 Open `index.html` offline. Skipped modes are shown as placeholders. Use `manual_ratings.csv` for human scoring with columns for identity, garment fidelity, realism, pose preservation, artifact score, winner, and notes.
+
+Generated benchmark folders are regular outputs and can be cleaned with:
+
+```bash
+python scripts/cleanup_outputs.py --older-than-hours 24 --keep-latest 5 --dry-run
+```
