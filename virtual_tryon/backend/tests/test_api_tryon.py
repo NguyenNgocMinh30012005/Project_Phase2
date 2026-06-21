@@ -55,9 +55,15 @@ def test_tryon_accepts_upper_body_request(client, png_file):
 def test_tryon_api_error_shape(monkeypatch, png_file):
     monkeypatch.setenv("TRYON_ENGINE", "idm_vton")
     from app.core.config import clear_settings_cache
+    from app.engines.idm_vton_engine import IDMVTonEngine
     from app.services.container import clear_container_cache
+    from app.utils.errors import ModelUnavailableError
     import app.main as main_module
 
+    def fail_run(self, inputs):
+        raise ModelUnavailableError("IDM-VTON is not available. missing checkpoint: densepose/model_final_162be9.pkl")
+
+    monkeypatch.setattr(IDMVTonEngine, "run", fail_run)
     clear_settings_cache()
     clear_container_cache()
     reloaded = importlib.reload(main_module)

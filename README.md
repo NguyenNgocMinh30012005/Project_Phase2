@@ -122,6 +122,8 @@ Create model folders:
 ```bash
 cd virtual_tryon
 bash scripts/setup_idm_vton.sh
+bash scripts/setup_idm_vton_runtime.sh
+bash scripts/download_idm_vton_ckpt.sh
 ```
 
 Then place checkpoints according to `configs/models.yaml`.

@@ -29,9 +29,15 @@ Run:
 ```bash
 cd virtual_tryon
 bash scripts/setup_idm_vton.sh
+bash scripts/setup_idm_vton_runtime.sh
+bash scripts/download_idm_vton_ckpt.sh
 ```
 
-This clones the official IDM-VTON implementation into `third_party/IDM-VTON`, creates the checkpoint folders, and verifies required preprocessing files. It does not download gated/private weights.
+`setup_idm_vton.sh` clones the official IDM-VTON implementation into `third_party/IDM-VTON` and creates checkpoint folders.
+
+`setup_idm_vton_runtime.sh` installs the IDM-VTON-compatible runtime pins used by the official environment. It also removes `peft` from the active venv because newer PEFT releases can conflict with `accelerate==0.25.0` during IDM-VTON pipeline loading.
+
+`download_idm_vton_ckpt.sh` downloads `ckpt/**` from the Hugging Face space `yisol/IDM-VTON`, copies it into `models/idm_vton/ckpt`, and verifies the four required preprocessing checkpoint files. It uses a temporary folder and does not write tokens to the repo.
 
 ## Config
 
