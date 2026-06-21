@@ -4,12 +4,13 @@ precision: bf16
 idm_vton:
   enabled: true
   repo_path: "./third_party/IDM-VTON"
-  checkpoint_dir: "./models/idm_vton"
+  checkpoint_dir: "./models/idm_vton/ckpt"
+  model_name: "yisol/IDM-VTON"
+  entrypoint: "./third_party/IDM-VTON/inference.py"
   default_width: 768
   default_height: 1024
   steps: 30
   guidance_scale: 2.0
-  entrypoint: null
 
 flux_refiner:
   enabled: true

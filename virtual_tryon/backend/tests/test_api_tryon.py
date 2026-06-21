@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+
 from fastapi.testclient import TestClient
 
 
@@ -48,3 +50,33 @@ def test_tryon_accepts_upper_body_request(client, png_file):
     assert payload["status"] == "completed"
     assert payload["result_url"]
     assert payload["debug"]["mask_url"]
+
+
+def test_tryon_api_error_shape(monkeypatch, png_file):
+    monkeypatch.setenv("TRYON_ENGINE", "idm_vton")
+    from app.core.config import clear_settings_cache
+    from app.services.container import clear_container_cache
+    import app.main as main_module
+
+    clear_settings_cache()
+    clear_container_cache()
+    reloaded = importlib.reload(main_module)
+    api = TestClient(reloaded.app)
+    response = api.post(
+        "/tryon",
+        data={"category": "upper_body", "use_refiner": "false", "repair_mode": "false"},
+        files={
+            "person_image": png_file("person.png", (170, 170, 170)),
+            "garment_top": png_file("top.png", (20, 80, 210)),
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert "IDM-VTON" in payload["error"]
+    assert "Traceback" not in payload["error"]
+
+    monkeypatch.setenv("TRYON_ENGINE", "mock")
+    clear_settings_cache()
+    clear_container_cache()
+    importlib.reload(main_module)

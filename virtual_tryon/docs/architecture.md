@@ -23,6 +23,9 @@ person image + garment image + category + prompt
   -> agnostic mask and agnostic person image
   -> garment segmentation
   -> core try-on engine, default IDM-VTON
+     -> stages a one-sample VITON-HD-style dataset
+     -> runs IDM-VTON inference.py through accelerate
+     -> copies generated image to core_output.png
   -> quality checks
   -> optional FLUX refiner on garment/mask region
   -> optional ADetailer-like local repair
@@ -38,6 +41,27 @@ is_available() -> bool
 prepare() -> None
 run(inputs: TryOnInputs) -> TryOnResult
 ```
+
+## IDM-VTON Adapter
+
+The IDM-VTON adapter keeps the official repository isolated in `third_party/IDM-VTON`. The backend does not copy official source files into `backend/app`. For each job it writes:
+
+```text
+data/outputs/{job_id}/idm_vton_dataset/test/image/person_0001.jpg
+data/outputs/{job_id}/idm_vton_dataset/test/cloth/garment_0001.jpg
+data/outputs/{job_id}/idm_vton_dataset/test/agnostic-mask/person_0001_mask.png
+data/outputs/{job_id}/idm_vton_dataset/test/image-densepose/person_0001.jpg
+data/outputs/{job_id}/idm_vton_dataset/test/vitonhd_test_tagged.json
+data/outputs/{job_id}/idm_vton_dataset/test_pairs.txt
+```
+
+Then it runs:
+
+```text
+python -m accelerate.commands.launch third_party/IDM-VTON/inference.py ...
+```
+
+If checkpoint, path, or dependency checks fail, the API returns a failed job with a clear error string instead of a raw stack trace.
 
 All refiners implement:
 

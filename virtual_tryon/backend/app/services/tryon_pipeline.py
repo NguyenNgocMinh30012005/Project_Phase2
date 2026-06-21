@@ -92,6 +92,8 @@ class TryOnPipeline:
         save_image(mask_result.agnostic_image, job_dir / "agnostic.png")
         save_image(garment_seg.cloth_mask, job_dir / "cloth_mask.png")
         save_image(garment_seg.normalized_crop, job_dir / "garment_normalized.png")
+        if densepose.densepose_path is None:
+            save_image(person, job_dir / "densepose_placeholder.png")
 
         engine = create_tryon_engine(self.settings)
         inputs = TryOnInputs(
@@ -144,6 +146,9 @@ class TryOnPipeline:
             except ModelUnavailableError as exc:
                 quality.notes.append(str(exc))
                 logger.warning("Skipping refiner: %s", exc)
+            except Exception as exc:
+                quality.notes.append(f"Refiner failed; returning core output. {exc}")
+                logger.exception("Refiner failed; falling back to core output.")
 
         if request.repair_mode and self.settings.repair.enabled:
             repair_engine = create_repair_engine(self.settings)

@@ -16,3 +16,12 @@ def test_default_values_valid():
     assert settings.image.output_height > 0
     assert settings.preprocessing.dilation_px >= 0
     assert settings.storage.outputs_dir.name == "outputs"
+
+
+def test_config_model_paths():
+    settings = load_settings()
+    assert settings.idm_vton.checkpoint_dir.name == "ckpt"
+    assert settings.idm_vton.entrypoint is not None
+    assert settings.idm_vton.entrypoint.name == "inference.py"
+    assert settings.idm_vton.repo_path is not None
+    assert settings.idm_vton.repo_path.name == "IDM-VTON"

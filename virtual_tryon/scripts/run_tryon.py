@@ -14,6 +14,7 @@ from app.core.config import load_settings  # noqa: E402
 from app.preprocessing.image_loader import load_image_from_path  # noqa: E402
 from app.services.storage_service import StorageService  # noqa: E402
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline  # noqa: E402
+from app.utils.errors import TryOnError  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,7 +56,10 @@ def main() -> int:
         repair_mode=not args.no_repair,
         seed=args.seed,
     )
-    response = pipeline.run(request)
+    try:
+        response = pipeline.run(request)
+    except TryOnError as exc:
+        raise SystemExit(f"Try-on failed: {exc}") from exc
     if not response.result_url:
         raise SystemExit("Pipeline completed without result_url.")
 

@@ -49,6 +49,17 @@ Response:
 
 If the core model is missing, the job returns `status: failed` and a clear `error` string.
 
+Example missing-model response:
+
+```json
+{
+  "job_id": "abc",
+  "status": "failed",
+  "result_url": null,
+  "error": "IDM-VTON is not available. missing checkpoint: densepose/model_final_162be9.pkl"
+}
+```
+
 ## GET /tryon/{job_id}
 
 Returns the stored job status for the current API process.

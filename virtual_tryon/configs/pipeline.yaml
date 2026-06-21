@@ -9,7 +9,7 @@ refinement:
   refine_only_masked_region: true
   preserve_face: true
   preserve_background: true
-  default_prompt: "Refine garment boundaries, fabric folds, lighting, texture, sleeves, collar, and hemline while preserving identity, face, pose, body shape, hair, hands, and background."
+  default_prompt: "Refine only the clothing region. Preserve the person's face, hair, hands, pose, body shape, and background. Improve garment boundaries, fabric realism, folds, lighting, and texture fidelity to the reference garment."
 
 repair_regions:
   - collar

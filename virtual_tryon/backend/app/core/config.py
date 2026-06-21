@@ -48,7 +48,7 @@ class EngineConfig(BaseModel):
     enabled: bool = True
     repo_path: Path | None = None
     checkpoint_dir: Path | None = None
-    entrypoint: str | None = None
+    entrypoint: Path | None = None
     model_name: str | None = None
     base_model: str | None = None
     lora_path: Path | None = None
@@ -128,7 +128,7 @@ def _resolve_paths(config: dict[str, Any]) -> dict[str, Any]:
 
     for section in ["idm_vton", "flux_refiner", "catvton", "klein_tryon_lora"]:
         section_config = config.get(section, {})
-        for key in ["repo_path", "checkpoint_dir", "lora_path"]:
+        for key in ["repo_path", "checkpoint_dir", "lora_path", "entrypoint"]:
             if section_config.get(key):
                 section_config[key] = resolve_project_path(section_config[key])
     return config

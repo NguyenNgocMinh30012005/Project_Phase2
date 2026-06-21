@@ -6,6 +6,7 @@ from PIL import Image
 from app.core.config import load_settings
 from app.schemas.tryon import TryOnResponse
 from app.services.storage_service import StorageService
+from app.services.job_service import JobService
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline
 from app.utils.errors import ModelUnavailableError
 
@@ -64,3 +65,15 @@ def test_debug_paths_are_created(tmp_path):
     assert (job_dir / "agnostic.png").exists()
     assert (job_dir / "core_output.png").exists()
     assert response.debug.core_output_url
+
+
+def test_pipeline_real_engine_fallback_returns_failed_job(tmp_path):
+    settings = configure_temp_storage(load_settings(), tmp_path)
+    settings.pipeline.engine = "idm_vton"
+    settings.idm_vton.checkpoint_dir = tmp_path / "missing_idm_vton"
+    storage = StorageService(settings.storage)
+    service = JobService(TryOnPipeline(settings, storage))
+    response = service.create_tryon_job(make_request("real_engine_missing"))
+    assert response.status == "failed"
+    assert response.error
+    assert "IDM-VTON" in response.error

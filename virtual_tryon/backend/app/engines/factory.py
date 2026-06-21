@@ -33,11 +33,13 @@ def create_repair_engine(settings: Settings):
 
 
 def model_statuses(settings: Settings) -> dict[str, str]:
+    idm_engine = IDMVTonEngine(settings.idm_vton)
     engines = {
-        "idm_vton": IDMVTonEngine(settings.idm_vton),
         "flux_refiner": FluxRefinerEngine(settings.flux_refiner),
         "catvton": CatVTonEngine(settings.catvton),
         "klein_tryon_lora": KleinTryOnLoraEngine(settings.klein_tryon_lora),
         "repair": ADetailerRepairEngine(settings.repair),
     }
-    return {name: "available" if engine.is_available() else "missing" for name, engine in engines.items()}
+    statuses = {"idm_vton": idm_engine.status()}
+    statuses.update({name: "available" if engine.is_available() else "missing" for name, engine in engines.items()})
+    return statuses
