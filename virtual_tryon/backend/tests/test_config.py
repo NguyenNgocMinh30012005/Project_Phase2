@@ -16,6 +16,7 @@ def test_default_values_valid():
     assert settings.image.output_height > 0
     assert settings.preprocessing.dilation_px >= 0
     assert settings.storage.outputs_dir.name == "outputs"
+    assert settings.mask_experiments.upper_body_expand_hem.enabled is False
 
 
 def test_config_model_paths():

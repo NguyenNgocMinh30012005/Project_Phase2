@@ -64,6 +64,12 @@ Every completed core job also writes `quality_report.json`:
 
 If `use_refiner=true` but FLUX is unavailable or fails, the job remains `completed`, `final_choice` stays `core`, and the failure reason is written to `flux_refiner_error.txt` plus the refined report notes.
 
+## Automated Metrics Versus Manual Review
+
+`quality_report.json` contains only signals that the code can compute or verify from the available images and masks. It must not contain subjective claims such as "identity looks good", "the old shirt is visible", or human 1-5 ratings unless a detector or metric is implemented for that claim.
+
+Subjective observations belong in the benchmark's `manual_ratings.csv` or the mask ablation's `manual_ratings_mask_ablation.csv`. Human reviewers should score identity, garment fidelity, old-garment removal, realism, pose preservation, over-editing, and the winning variant there.
+
 ## Benchmark
 
 Run:
@@ -114,3 +120,4 @@ Future upgrades:
 - Human parsing based region preservation.
 - Garment CLIP/DINO similarity.
 - Per-region artifact detection for collar, sleeve, hands, and hemline.
+- Detector or segmentation comparison for old-garment remnants near the hemline.

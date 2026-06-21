@@ -93,3 +93,44 @@ Generated benchmark folders are regular outputs and can be cleaned with:
 ```bash
 python scripts/cleanup_outputs.py --older-than-hours 24 --keep-latest 5 --dry-run
 ```
+
+## Upper-Body Mask Ablation
+
+The upper-body hem expansion is an experiment and is disabled in the production configuration. Run all controlled variants with the same sample and seed:
+
+```bash
+python scripts/run_mask_ablation.py \
+  --sample data/eval_set/sample_001 \
+  --seed 0 \
+  --variants idm_original,idm_mask_expanded,idm_mask_expanded_flux_local \
+  --output data/outputs/ablation_upper_body_mask_test
+```
+
+Use `--mock` for CI or local schema verification without IDM-VTON or FLUX:
+
+```bash
+python scripts/run_mask_ablation.py \
+  --sample data/eval_set/sample_001 \
+  --seed 0 \
+  --variants idm_original,idm_mask_expanded,idm_mask_expanded_flux_local \
+  --output data/outputs/ablation_upper_body_mask_mock \
+  --mock
+```
+
+The runner writes:
+
+```text
+data/outputs/ablation_upper_body_mask_test/
+  comparison_grid.png
+  comparison_index.html
+  summary.csv
+  summary.json
+  manual_ratings_mask_ablation.csv
+  idm_original/
+  idm_mask_expanded/
+  idm_mask_expanded_flux_local/
+```
+
+The expanded variant also saves original, expanded, and difference masks plus overlays. The FLUX variant uses `safe_refine_mask.png`, falling back to `boundary_refine_mask.png`, and never refines the whole image. If the local FLUX backend is unavailable or runs out of memory, the row is marked skipped and the core comparison remains usable.
+
+Do not enable the expanded mask by default based on automated metrics alone. Merge it only after manual review confirms stronger old-garment removal without weaker identity, pose, background, or garment shape.

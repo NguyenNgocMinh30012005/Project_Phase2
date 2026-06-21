@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
 
 from app.core.config import Settings
+from app.core.paths import REPO_ROOT
 from app.engines.base import TryOnInputs
 from app.engines.factory import create_refiner, create_repair_engine, create_tryon_engine
 from app.evaluation.quality_checks import build_quality_report, run_quality_checks
@@ -67,6 +71,24 @@ class TryOnPipeline:
             raise InputValidationError("At least one garment image is required.")
         self._select_garment(request)
 
+    @staticmethod
+    def _config_hash(payload: dict) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _commit_sha() -> str:
+        try:
+            return subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return "unknown"
+
     def run(self, request: PipelineRequest) -> TryOnResponse:
         self.validate_inputs(request)
         seed = normalize_seed(request.seed)
@@ -84,7 +106,13 @@ class TryOnPipeline:
 
         human_parse = self.human_parser.parse(person, job_dir)
         densepose = self.densepose.estimate(person, job_dir)
-        mask_result = create_agnostic_mask(person, request.category, self.settings.preprocessing)
+        mask_experiment = self.settings.mask_experiments.upper_body_expand_hem
+        mask_result = create_agnostic_mask(
+            person,
+            request.category,
+            self.settings.preprocessing,
+            mask_experiment,
+        )
         garment_seg = self.segmenter.segment(garment, (width, height))
 
         save_image(mask_result.raw_mask, job_dir / "raw_mask.png")
@@ -92,6 +120,17 @@ class TryOnPipeline:
         save_image(mask_result.soft_mask, job_dir / "soft_mask.png")
         save_image(mask_result.preview, job_dir / "mask_preview.png")
         save_image(mask_result.agnostic_image, job_dir / "agnostic.png")
+        experiment_debug_images = {
+            "mask_original_upper_body.png": mask_result.original_upper_body_mask,
+            "mask_expanded_upper_body.png": mask_result.expanded_upper_body_mask,
+            "mask_diff_upper_body.png": mask_result.diff_upper_body_mask,
+            "mask_original_upper_body_overlay.png": mask_result.original_upper_body_overlay,
+            "mask_expanded_upper_body_overlay.png": mask_result.expanded_upper_body_overlay,
+            "mask_diff_upper_body_overlay.png": mask_result.diff_upper_body_overlay,
+        }
+        for filename, image in experiment_debug_images.items():
+            if image is not None:
+                save_image(image, job_dir / filename)
         save_image(garment_seg.cloth_mask, job_dir / "cloth_mask.png")
         save_image(garment_seg.normalized_crop, job_dir / "garment_normalized.png")
         if densepose.densepose_path is None:
@@ -207,9 +246,27 @@ class TryOnPipeline:
 
         result_path = save_image(current_image, job_dir / "result.png")
         quality_report_path = self.storage.save_json(request.job_id, "quality_report.json", quality_report)
+        mask_config = {
+            "preprocessing": self.settings.preprocessing.model_dump(mode="json"),
+            "upper_body_expand_hem": mask_experiment.model_dump(mode="json"),
+        }
+        engine_config = {
+            "pipeline_engine": self.settings.pipeline.engine,
+            "runtime": self.settings.runtime.model_dump(mode="json"),
+            "engine": (
+                self.settings.idm_vton.model_dump(mode="json")
+                if self.settings.pipeline.engine in {"idm_vton", "mock"}
+                else getattr(self.settings, self.settings.pipeline.engine).model_dump(mode="json")
+            ),
+        }
         metadata = {
             "job_id": request.job_id,
             "seed": seed,
+            "mask_config_hash": self._config_hash(mask_config),
+            "engine_config_hash": self._config_hash(engine_config),
+            "mask_config": mask_config,
+            "engine_config": engine_config,
+            "commit_sha": self._commit_sha(),
             "category": request.category,
             "engine": getattr(engine, "name", "unknown"),
             "prompt": prompt,

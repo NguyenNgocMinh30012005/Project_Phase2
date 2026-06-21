@@ -4,6 +4,7 @@
 - Large pose changes and unusual camera angles reduce garment alignment quality.
 - Occluded torso regions are difficult to reconstruct reliably.
 - Long hair and hands overlapping the garment can cause mask or boundary artifacts.
+- The original garment can remain visible near the lower torso or hemline when the upper-body agnostic mask does not cover the full old garment.
 - The optional refiner can over-edit identity, background, or garment details despite mask constraints.
 - Runtime and output behavior depend on third-party checkpoint availability and model licenses.
 - The demo currently has no authentication, tenant isolation, quotas, or per-user artifact access control.

@@ -36,6 +36,16 @@ refinement:
   preserve_background: true
   default_prompt: "Refine only the clothing region. Preserve the person's face, hair, hands, pose, body shape, and background. Improve garment boundaries, fabric realism, folds, lighting, shadows, and texture fidelity to the reference garment."
 
+mask_experiments:
+  upper_body_expand_hem:
+    enabled: false
+    torso_down_extension_ratio: 0.12
+    waist_extra_dilation_px: 24
+    preserve_face: true
+    preserve_hair: true
+    preserve_hands: true
+    save_debug_overlays: true
+
 repair_regions:
   - collar
   - sleeve

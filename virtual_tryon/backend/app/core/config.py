@@ -32,6 +32,20 @@ class PreprocessingConfig(BaseModel):
     preserve_hair: bool = True
 
 
+class MaskExperimentConfig(BaseModel):
+    enabled: bool = False
+    torso_down_extension_ratio: float = 0.12
+    waist_extra_dilation_px: int = 24
+    preserve_face: bool = True
+    preserve_hair: bool = True
+    preserve_hands: bool = True
+    save_debug_overlays: bool = True
+
+
+class MaskExperimentsConfig(BaseModel):
+    upper_body_expand_hem: MaskExperimentConfig = Field(default_factory=MaskExperimentConfig)
+
+
 class PipelineConfig(BaseModel):
     engine: str = "idm_vton"
     allow_mock_engine: bool = False
@@ -135,6 +149,7 @@ class Settings(BaseModel):
     repair: RepairConfig
     quality: QualityConfig
     refinement: RefinementConfig
+    mask_experiments: MaskExperimentsConfig = Field(default_factory=MaskExperimentsConfig)
     repair_regions: list[str] = Field(default_factory=list)
 
 
@@ -210,6 +225,7 @@ def load_settings() -> Settings:
         repair=RepairConfig(**config.get("repair", {})),
         quality=QualityConfig(**config.get("quality", {})),
         refinement=RefinementConfig(**config.get("refinement", {})),
+        mask_experiments=MaskExperimentsConfig(**config.get("mask_experiments", {})),
         repair_regions=config.get("repair_regions", []),
     )
 
