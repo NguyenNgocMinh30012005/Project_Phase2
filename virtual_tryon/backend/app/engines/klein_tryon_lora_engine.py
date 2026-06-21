@@ -4,6 +4,7 @@ import json
 import os
 import time
 import urllib.request
+from urllib.parse import urlsplit, urlunsplit
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,10 @@ def _sanitize_payload(value: Any) -> Any:
         return [_sanitize_payload(item) for item in value]
     if isinstance(value, tuple):
         return [_sanitize_payload(item) for item in value]
+    if isinstance(value, str) and value.startswith(("http://", "https://")):
+        parsed = urlsplit(value)
+        if parsed.query or parsed.fragment:
+            return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "[redacted-query]", ""))
     return value
 
 

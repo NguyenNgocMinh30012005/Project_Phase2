@@ -4,6 +4,7 @@ import csv
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 from PIL import Image
@@ -56,6 +57,68 @@ def _inputs(output_dir: Path) -> TryOnInputs:
     )
 
 
+def _write_eval_sample(root: Path) -> Path:
+    eval_set = root / "eval_set" / "sample_001"
+    eval_set.mkdir(parents=True)
+    Image.new("RGB", (128, 192), (180, 180, 180)).save(eval_set / "person.jpg")
+    Image.new("RGB", (128, 192), (20, 80, 210)).save(eval_set / "garment_top.jpg")
+    (eval_set / "metadata.json").write_text(
+        json.dumps(
+            {
+                "sample_id": "sample_001",
+                "category": "upper_body",
+                "difficulty": "easy",
+                "expected_focus": ["identity"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return eval_set
+
+
+def _run_ablation(tmp_path: Path, *extra_args: str) -> Path:
+    eval_set = _write_eval_sample(tmp_path)
+    output_dir = tmp_path / "ablation"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "run_klein_lora_ablation.py"),
+            "--sample",
+            str(eval_set),
+            "--output",
+            str(output_dir),
+            "--mock",
+            *extra_args,
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return output_dir
+
+
+def test_fal_runtime_check_missing_key(monkeypatch):
+    monkeypatch.delenv("FAL_KEY", raising=False)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "check_fal_runtime.py"),
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    assert payload["fal_key_set"] is False
+    assert payload["klein_lora_available"] is False
+    assert "FAL_KEY is not set" in payload["messages"]
+    assert "hf_" not in completed.stdout
+
+
 def test_klein_lora_availability_missing_token(monkeypatch):
     monkeypatch.delenv("FAL_KEY", raising=False)
     engine = KleinTryOnLoraEngine(_config())
@@ -95,43 +158,120 @@ def test_klein_lora_sanitizes_request_response(monkeypatch, tmp_path):
     assert request_payload["loras"][0]["path"].endswith("flux-klein-tryon.safetensors")
 
 
+def test_fal_upload_file_called_for_local_inputs(monkeypatch, tmp_path):
+    calls: list[str] = []
+    captured: dict = {}
+
+    def fake_upload_file(path: str) -> str:
+        calls.append(Path(path).name)
+        return f"https://fal.invalid/upload/{Path(path).name}?token=private"
+
+    def fake_subscribe(endpoint: str, *, arguments: dict, with_logs: bool = False) -> dict:
+        captured["endpoint"] = endpoint
+        captured["arguments"] = arguments
+        captured["with_logs"] = with_logs
+        return {
+            "images": [{"url": "https://fal.invalid/result.png?token=private"}],
+            "api_key": "should-not-be-saved",
+        }
+
+    def fake_download_image(url: str, output_path: Path, timeout_seconds: int) -> Image.Image:
+        image = Image.new("RGB", (64, 96), (10, 20, 30))
+        image.save(output_path)
+        return image
+
+    fake_module = types.SimpleNamespace(upload_file=fake_upload_file, subscribe=fake_subscribe)
+    monkeypatch.setitem(sys.modules, "fal_client", fake_module)
+    monkeypatch.setenv("FAL_KEY", "test-fal-key")
+    monkeypatch.setattr(KleinTryOnLoraEngine, "_download_image", staticmethod(fake_download_image))
+
+    result = KleinTryOnLoraEngine(_config()).run(_inputs(tmp_path))
+
+    assert result.image.size == (64, 96)
+    assert calls == ["person_reference.png", "top_reference.png", "auto_bottom_reference.png"]
+    assert captured["endpoint"] == "fal-ai/flux-2/klein/9b/base/edit/lora"
+    assert len(captured["arguments"]["image_urls"]) == 3
+    request_text = (tmp_path / "request_sanitized.json").read_text(encoding="utf-8")
+    response_text = (tmp_path / "response_sanitized.json").read_text(encoding="utf-8")
+    assert "private" not in request_text
+    assert "private" not in response_text
+    assert "should-not-be-saved" not in response_text
+
+
+def test_klein_lora_prompt_variants_saved(tmp_path):
+    output_dir = _run_ablation(tmp_path)
+    default_prompt = output_dir / "sample_001" / "klein_lora_default" / "prompt.txt"
+    strong_prompt = output_dir / "sample_001" / "klein_lora_strong_remove_old_shirt" / "prompt.txt"
+    assert default_prompt.exists()
+    assert strong_prompt.exists()
+    assert default_prompt.read_text(encoding="utf-8").startswith("TRYON")
+    assert strong_prompt.read_text(encoding="utf-8").startswith("TRYON")
+    assert "The final image is a full body shot." in default_prompt.read_text(encoding="utf-8")
+    assert "Keep only the blue velvet wrap top" in strong_prompt.read_text(encoding="utf-8")
+
+
+def test_klein_lora_ablation_summary_schema(tmp_path):
+    output_dir = _run_ablation(tmp_path)
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    rows = summary["rows"]
+    by_variant = {row["variant"]: row for row in rows}
+    assert {"idm_original", "klein_lora_default", "klein_lora_strong_remove_old_shirt"}.issubset(by_variant)
+    for row in rows:
+        for column in [
+            "sample_id",
+            "variant",
+            "prompt_variant",
+            "status",
+            "runtime_seconds",
+            "output_path",
+            "prompt_path",
+            "engine_status",
+            "error_code",
+            "notes",
+        ]:
+            assert column in row
+    assert by_variant["klein_lora_default"]["prompt_path"] == "sample_001/klein_lora_default/prompt.txt"
+    assert (output_dir / "comparison_grid.png").exists()
+    assert (output_dir / "comparison_index.html").exists()
+
+
 def test_klein_lora_manual_rating_template(tmp_path):
-    eval_set = tmp_path / "eval_set" / "sample_001"
-    eval_set.mkdir(parents=True)
-    Image.new("RGB", (128, 192), (180, 180, 180)).save(eval_set / "person.jpg")
-    Image.new("RGB", (128, 192), (20, 80, 210)).save(eval_set / "garment_top.jpg")
-    (eval_set / "metadata.json").write_text(
-        json.dumps(
-            {
-                "sample_id": "sample_001",
-                "category": "upper_body",
-                "difficulty": "easy",
-                "expected_focus": ["identity"],
-            }
-        ),
-        encoding="utf-8",
-    )
-    output_dir = tmp_path / "ablation"
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "run_klein_lora_ablation.py"),
-            "--sample",
-            str(eval_set),
-            "--output",
-            str(output_dir),
-            "--mock",
-            "--skip-idm",
-        ],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
+    output_dir = _run_ablation(tmp_path)
     template = output_dir / "manual_ratings_klein_lora.csv"
     assert template.exists()
     rows = list(csv.DictReader(template.open(encoding="utf-8")))
     variants = {row["variant"] for row in rows}
-    assert {"klein_lora_default_prompt", "klein_lora_strong_prompt"}.issubset(variants)
+    assert {"klein_lora_default", "klein_lora_strong_remove_old_shirt"}.issubset(variants)
     assert all(row["identity_1_5"] == "" for row in rows)
+
+
+def test_klein_lora_manual_ratings_no_subjective_autofill(tmp_path):
+    output_dir = _run_ablation(tmp_path)
+    rows = list(csv.DictReader((output_dir / "manual_ratings_klein_lora.csv").open(encoding="utf-8")))
+    subjective_columns = [
+        "identity_1_5",
+        "garment_fidelity_1_5",
+        "old_garment_removed_1_5",
+        "realism_1_5",
+        "pose_preservation_1_5",
+        "body_shape_preservation_1_5",
+        "background_preservation_1_5",
+        "overedit_1_5",
+        "winner",
+        "notes",
+    ]
+    for row in rows:
+        assert row["sample_id"] == "sample_001"
+        assert "variant" in row
+        for column in subjective_columns:
+            assert row[column] == ""
+
+
+def test_quality_report_no_subjective_notes(tmp_path):
+    output_dir = _run_ablation(tmp_path)
+    report_path = output_dir / "sample_001" / "idm_original" / "quality_report.json"
+    assert report_path.exists()
+    serialized = report_path.read_text(encoding="utf-8").lower()
+    assert "pink shirt remains visible" not in serialized
+    assert "old_garment_removed_1_5" not in serialized
+    assert "identity_1_5" not in serialized

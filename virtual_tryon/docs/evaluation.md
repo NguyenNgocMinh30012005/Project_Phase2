@@ -73,10 +73,10 @@ Subjective observations belong in the benchmark's `manual_ratings.csv`, the mask
 Klein LoRA manual ratings use this schema:
 
 ```text
-sample_id,variant,result_path,identity_1_5,garment_fidelity_1_5,old_garment_removed_1_5,realism_1_5,pose_preservation_1_5,body_shape_preservation_1_5,background_preservation_1_5,overedit_1_5,winner,notes
+sample_id,variant,output_path,prompt_path,identity_1_5,garment_fidelity_1_5,old_garment_removed_1_5,realism_1_5,pose_preservation_1_5,body_shape_preservation_1_5,background_preservation_1_5,overedit_1_5,winner,notes
 ```
 
-The template auto-fills only sample, variant, and path fields. Human scores and notes stay blank until a reviewer fills them in.
+The template auto-fills only sample, variant, `output_path`, and `prompt_path` fields. Human scores and notes stay blank until a reviewer fills them in.
 
 ## Benchmark
 

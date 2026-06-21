@@ -6,11 +6,11 @@ Expand `data/eval_set/` from the single smoke sample to 5-10 consented, license-
 
 Include a deliberate mix:
 
-- Easy upper-body transfer with a clear frontal pose and unobstructed torso.
-- Logo, typography, stripe, plaid, or other fine-pattern garment.
-- Long hair crossing the collar or upper garment.
-- One or both hands occluding the garment.
-- Side or three-quarter pose.
+- Simple upper-body transfer with a clear frontal pose and unobstructed torso.
+- Top with logo, typography, stripe, plaid, or other fine-pattern garment.
+- Hair occlusion crossing the collar or upper garment.
+- Hand occlusion, with one or both hands overlapping the garment.
+- Side pose or non-frontal three-quarter pose.
 - Lower-body or dress samples only where the selected engine and inputs support them.
 
 ## Folder Layout
@@ -61,8 +61,20 @@ With local model dependencies available, run:
 ```bash
 python scripts/benchmark_pipeline.py \
   --eval-set data/eval_set \
-  --modes idm,idm_flux \
+  --modes idm,idm_mask_expanded,klein_lora \
   --limit 5
 ```
 
 Review `summary.json`, `summary.csv`, the generated grid/gallery, and `manual_ratings.csv`. Compare identity, garment fidelity, realism, pose preservation, and artifacts rather than selecting a winner from one automated score alone.
+
+For Klein LoRA prompt-specific review, run:
+
+```bash
+python scripts/run_klein_lora_ablation.py \
+  --sample data/eval_set/sample_001 \
+  --seed 42 \
+  --bottom-strategy crop_from_person \
+  --output data/outputs/klein_lora_ablation_sample_001
+```
+
+Repeat for each local sample. Do not commit private or license-unclear images. Do not expose Klein LoRA as a default or advanced UI engine until at least 3-5 samples win or tie IDM-VTON under the manual criteria in `docs/klein_lora_real_eval.md`.

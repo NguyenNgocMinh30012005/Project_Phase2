@@ -155,13 +155,19 @@ python scripts/run_klein_lora_ablation.py \
 
 Without `FAL_KEY`, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `FAL_KEY` and the fal client installed, the same command attempts the real endpoint.
 
+Before a real run, check credentials and dependencies without printing secrets:
+
+```bash
+python scripts/check_fal_runtime.py --strict
+```
+
 The comparison grid contains:
 
 - Person input.
 - Top garment reference.
 - Auto bottom reference.
 - IDM original.
-- Klein LoRA default prompt.
-- Klein LoRA strong prompt.
+- `klein_lora_default`.
+- `klein_lora_strong_remove_old_shirt`.
 
 Use `manual_ratings_klein_lora.csv` for subjective scoring. Do not promote Klein LoRA to the default engine unless it wins or ties IDM-VTON on multiple eval samples while preserving identity, pose, body shape, and background.
