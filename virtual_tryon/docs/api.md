@@ -31,6 +31,7 @@ Multipart form fields:
 - `use_refiner`: boolean, default `true`.
 - `repair_mode`: boolean, default `true`.
 - `run_mode`: optional `sync` or `async`; defaults to `configs/pipeline.yaml`.
+- `engine_mode`: optional `idm_vton`, `idm_vton_flux`, or `klein_lora`; default is the configured core engine.
 - `seed`: optional integer.
 
 Response:
@@ -67,6 +68,8 @@ When `run_mode=async`, `POST /tryon` returns quickly:
 Poll `GET /tryon/{job_id}` until `completed` or `failed`.
 
 If the core model is missing, the job returns `status: failed` and a clear `error` string.
+
+`engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. If `FAL_KEY`, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace.
 
 If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out of memory, the job still returns `status: completed` with `result_url` pointing to the IDM-VTON core output. The output folder includes `flux_refiner_error.txt` and `quality_report.json` explaining the fallback. Raw stack traces are not returned in the API response. Repair runs only after a refined output is created and accepted by the quality gate.
 

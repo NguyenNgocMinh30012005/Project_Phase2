@@ -1,6 +1,6 @@
 # Project_Phase2 - Virtual Try-On
 
-Production-grade Virtual Try-On scaffold with an IDM-VTON-style core engine, optional FLUX refiner, baseline engine adapters, FastAPI backend, React frontend MVP, CLI scripts, and tests.
+Production-grade Virtual Try-On scaffold with an IDM-VTON-style core engine, optional FLUX refiner, experimental baseline engine adapters, FastAPI backend, React frontend MVP, CLI scripts, and tests.
 
 ## Repository Layout
 
@@ -131,7 +131,20 @@ python scripts/build_review_gallery.py \
   --benchmark-dir data/outputs/benchmark_phase6_test
 ```
 
-IDM-VTON remains the default core engine. FLUX is an optional refiner with core-output fallback. CatVTON and Klein Try-On LoRA are benchmark baselines and are skipped clearly when their checkpoints or backends are unavailable.
+IDM-VTON remains the default core engine. FLUX is an optional refiner with core-output fallback. CatVTON and Klein Try-On LoRA are experimental benchmark baselines and are skipped clearly when their checkpoints, API credentials, or backends are unavailable. Klein LoRA can be selected explicitly with `engine_mode=klein_lora` or benchmark mode `klein_lora`, but it is not a production default.
+
+Klein LoRA ablation:
+
+```bash
+cd virtual_tryon
+python scripts/run_klein_lora_ablation.py \
+  --sample data/eval_set/sample_001 \
+  --seed 42 \
+  --bottom-strategy crop_from_person \
+  --output data/outputs/klein_lora_ablation_test
+```
+
+For the fal.ai backend, set `FAL_KEY` in the shell only. Do not commit API keys, tokens, model weights, or generated outputs.
 
 ## Frontend
 

@@ -36,11 +36,26 @@ catvton:
 
 klein_tryon_lora:
   enabled: false
+  backend: "fal_api"
   base_model: "black-forest-labs/FLUX.2-klein-9B"
+  lora_repo: "fal/flux-klein-9b-virtual-tryon-lora"
+  lora_weight_api: "flux-klein-tryon.safetensors"
+  lora_weight_comfy: "flux-klein-tryon-comfy.safetensors"
   lora_path: "./models/loras/flux-klein-tryon.safetensors"
-  steps: 28
+  fal_endpoint: "fal-ai/flux-2/klein/9b/base/edit/lora"
+  num_inference_steps: 28
   guidance_scale: 2.5
   lora_scale: 1.0
+  resolution: 1024
+  require_three_images: true
+  fallback_on_error: true
+  timeout_seconds: 900
+  bottom_strategy: "crop_from_person"
+  bottom_crop:
+    y_start_ratio: 0.50
+    y_end_ratio: 0.98
+    x_margin_ratio: 0.08
+    save_debug: true
 
 repair:
   enabled: true

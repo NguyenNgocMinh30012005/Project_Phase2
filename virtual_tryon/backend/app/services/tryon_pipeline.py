@@ -43,6 +43,7 @@ class PipelineRequest:
     use_refiner: bool
     repair_mode: bool
     seed: int | None = None
+    engine_mode: str | None = None
 
 
 class TryOnPipeline:
@@ -63,6 +64,25 @@ class TryOnPipeline:
         if request.category == "full_outfit":
             return request.garment_dress or request.garment_top or request.garment_bottom  # type: ignore[return-value]
         raise InputValidationError(f"No garment image provided for category '{request.category}'.")
+
+    def _settings_for_request(self, request: PipelineRequest) -> Settings:
+        settings = self.settings
+        if not request.engine_mode:
+            return settings
+        mode = request.engine_mode
+        mode_settings = settings.model_copy(deep=True)
+        if mode == "idm_vton":
+            mode_settings.pipeline.engine = "idm_vton"
+        elif mode == "idm_vton_flux":
+            mode_settings.pipeline.engine = "idm_vton"
+            mode_settings.flux_refiner.enabled = True
+            mode_settings.refinement.enabled = True
+        elif mode == "klein_lora":
+            mode_settings.pipeline.engine = "klein_tryon_lora"
+            mode_settings.klein_tryon_lora.enabled = True
+        else:
+            raise InputValidationError(f"Unsupported engine_mode '{mode}'.")
+        return mode_settings
 
     def validate_inputs(self, request: PipelineRequest) -> None:
         if request.person_image is None:
@@ -91,26 +111,38 @@ class TryOnPipeline:
 
     def run(self, request: PipelineRequest) -> TryOnResponse:
         self.validate_inputs(request)
+        settings = self._settings_for_request(request)
         seed = normalize_seed(request.seed)
         set_seed(seed)
 
         job_dir = self.storage.job_dir(request.job_id)
-        width = self.settings.image.output_width
-        height = self.settings.image.output_height
-        prompt = request.prompt or self.settings.refinement.default_prompt
+        width = settings.image.output_width
+        height = settings.image.output_height
+        prompt = request.prompt if request.prompt else (
+            None if settings.pipeline.engine == "klein_tryon_lora" else settings.refinement.default_prompt
+        )
 
         person = fit_to_canvas(request.person_image, width, height)
         garment = fit_to_canvas(self._select_garment(request), width, height)
+        garment_top = fit_to_canvas(request.garment_top, width, height) if request.garment_top else None
+        garment_bottom = fit_to_canvas(request.garment_bottom, width, height) if request.garment_bottom else None
+        garment_dress = fit_to_canvas(request.garment_dress, width, height) if request.garment_dress else None
         save_image(person, job_dir / "person.png")
         save_image(garment, job_dir / "garment.png")
+        if garment_top is not None:
+            save_image(garment_top, job_dir / "garment_top.png")
+        if garment_bottom is not None:
+            save_image(garment_bottom, job_dir / "garment_bottom.png")
+        if garment_dress is not None:
+            save_image(garment_dress, job_dir / "garment_dress.png")
 
         human_parse = self.human_parser.parse(person, job_dir)
         densepose = self.densepose.estimate(person, job_dir)
-        mask_experiment = self.settings.mask_experiments.upper_body_expand_hem
+        mask_experiment = settings.mask_experiments.upper_body_expand_hem
         mask_result = create_agnostic_mask(
             person,
             request.category,
-            self.settings.preprocessing,
+            settings.preprocessing,
             mask_experiment,
         )
         garment_seg = self.segmenter.segment(garment, (width, height))
@@ -136,7 +168,7 @@ class TryOnPipeline:
         if densepose.densepose_path is None:
             save_image(person, job_dir / "densepose_placeholder.png")
 
-        engine = create_tryon_engine(self.settings)
+        engine = create_tryon_engine(settings)
         inputs = TryOnInputs(
             person_image=person,
             garment_image=garment_seg.normalized_crop,
@@ -149,6 +181,12 @@ class TryOnPipeline:
             extra={
                 "person_path": job_dir / "person.png",
                 "garment_path": job_dir / "garment.png",
+                "garment_top_image": garment_top,
+                "garment_bottom_image": garment_bottom,
+                "garment_dress_image": garment_dress,
+                "garment_top_path": job_dir / "garment_top.png" if garment_top is not None else None,
+                "garment_bottom_path": job_dir / "garment_bottom.png" if garment_bottom is not None else None,
+                "garment_dress_path": job_dir / "garment_dress.png" if garment_dress is not None else None,
                 "mask_path": job_dir / "agnostic_mask.png",
                 "human_parse": human_parse.warning,
                 "densepose": densepose.warning,
@@ -164,21 +202,21 @@ class TryOnPipeline:
         core_image = core.image
         current_image = core_image
 
-        refine_masks = build_refine_masks(person, mask_result.soft_mask, self.settings.refinement)
+        refine_masks = build_refine_masks(person, mask_result.soft_mask, settings.refinement)
         save_image(refine_masks.garment_refine_mask, job_dir / "garment_refine_mask.png")
         save_image(refine_masks.boundary_refine_mask, job_dir / "boundary_refine_mask.png")
         save_image(refine_masks.safe_refine_mask, job_dir / "safe_refine_mask.png")
         save_image(refine_masks.garment_overlay, job_dir / "garment_refine_mask_overlay.png")
         save_image(refine_masks.boundary_overlay, job_dir / "boundary_refine_mask_overlay.png")
         save_image(refine_masks.safe_overlay, job_dir / "safe_refine_mask_overlay.png")
-        active_refine_mask = select_refine_mask(refine_masks, self.settings.refinement.mask_mode)
+        active_refine_mask = select_refine_mask(refine_masks, settings.refinement.mask_mode)
 
         quality: QualityScores = run_quality_checks(
             person,
             core_image,
             garment_seg.normalized_crop,
             active_refine_mask,
-            self.settings.quality,
+            settings.quality,
         )
 
         refined_path: Path | None = None
@@ -192,8 +230,9 @@ class TryOnPipeline:
             "klein_lora": "success" if core_engine_name == "klein_tryon_lora" else "skipped",
         }
         refiner_status = "skipped"
-        if request.use_refiner and self.settings.refinement.enabled and self.settings.flux_refiner.enabled:
-            refiner = create_refiner(self.settings)
+        use_refiner = request.use_refiner or request.engine_mode == "idm_vton_flux"
+        if use_refiner and settings.refinement.enabled and settings.flux_refiner.enabled:
+            refiner = create_refiner(settings)
             try:
                 refined = refiner.refine(
                     core_image,
@@ -228,7 +267,7 @@ class TryOnPipeline:
             core_image,
             refined_image,
             active_refine_mask,
-            self.settings.quality,
+            settings.quality,
             refine_notes=refine_notes,
             engine_status=engine_status,
         )
@@ -237,8 +276,8 @@ class TryOnPipeline:
         else:
             current_image = core_image
 
-        if request.repair_mode and self.settings.repair.enabled and refined_image is not None and quality_report["final_choice"] == "refined":
-            repair_engine = create_repair_engine(self.settings)
+        if request.repair_mode and settings.repair.enabled and refined_image is not None and quality_report["final_choice"] == "refined":
+            repair_engine = create_repair_engine(settings)
             repaired = repair_engine.refine(current_image, active_refine_mask, prompt, seed=seed)
             current_image = repaired.image
             refined_path = save_image(current_image, job_dir / "refined_output.png")
@@ -247,16 +286,16 @@ class TryOnPipeline:
         result_path = save_image(current_image, job_dir / "result.png")
         quality_report_path = self.storage.save_json(request.job_id, "quality_report.json", quality_report)
         mask_config = {
-            "preprocessing": self.settings.preprocessing.model_dump(mode="json"),
+            "preprocessing": settings.preprocessing.model_dump(mode="json"),
             "upper_body_expand_hem": mask_experiment.model_dump(mode="json"),
         }
         engine_config = {
-            "pipeline_engine": self.settings.pipeline.engine,
-            "runtime": self.settings.runtime.model_dump(mode="json"),
+            "pipeline_engine": settings.pipeline.engine,
+            "runtime": settings.runtime.model_dump(mode="json"),
             "engine": (
-                self.settings.idm_vton.model_dump(mode="json")
-                if self.settings.pipeline.engine in {"idm_vton", "mock"}
-                else getattr(self.settings, self.settings.pipeline.engine).model_dump(mode="json")
+                settings.idm_vton.model_dump(mode="json")
+                if settings.pipeline.engine in {"idm_vton", "mock"}
+                else getattr(settings, settings.pipeline.engine).model_dump(mode="json")
             ),
         }
         metadata = {
@@ -280,7 +319,7 @@ class TryOnPipeline:
         write_artifact_manifest(
             request.job_id,
             job_dir,
-            self.settings.storage.public_outputs_prefix,
+            settings.storage.public_outputs_prefix,
         )
 
         return TryOnResponse(

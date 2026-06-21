@@ -64,3 +64,36 @@ def test_benchmark_skips_unavailable_baseline_engines(tmp_path):
     assert by_mode["klein_lora"]["status"] == "unavailable"
     assert (output_dir / "index.html").exists()
     assert (output_dir / "manual_ratings.csv").exists()
+
+
+def test_benchmark_klein_lora_skips_when_unavailable(tmp_path, monkeypatch):
+    monkeypatch.delenv("FAL_KEY", raising=False)
+    eval_set = _write_eval_sample(tmp_path / "eval_set")
+    output_dir = tmp_path / "benchmark_klein"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "benchmark_pipeline.py"),
+            "--eval-set",
+            str(eval_set),
+            "--modes",
+            "klein_lora",
+            "--limit",
+            "1",
+            "--output",
+            str(output_dir),
+            "--mock",
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    row = summary["rows"][0]
+    assert row["mode"] == "klein_lora"
+    assert row["status"] == "unavailable"
+    assert row["error_code"] == "ENGINE_UNAVAILABLE"
+    assert (output_dir / "sample_001" / "klein_lora" / "status.json").exists()

@@ -29,13 +29,25 @@ from validate_eval_set import EvalSample, discover_eval_samples  # noqa: E402
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-SUPPORTED_MODES = {"idm", "idm_flux", "catvton", "klein_lora", "repair"}
+SUPPORTED_MODES = {
+    "idm",
+    "idm_flux",
+    "idm_mask_expanded",
+    "idm_mask_expanded_flux",
+    "catvton",
+    "klein_lora",
+    "repair",
+}
 CSV_COLUMNS = [
     "sample_id",
     "mode",
     "status",
     "runtime_seconds",
+    "result_path",
     "output_path",
+    "prompt_path",
+    "engine_status",
+    "error_code",
     "background_preservation_score",
     "face_preservation_score",
     "garment_change_score",
@@ -118,7 +130,7 @@ def _parse_modes(value: str) -> list[str]:
     invalid = [mode for mode in modes if mode not in SUPPORTED_MODES]
     if invalid:
         raise SystemExit(f"Unsupported benchmark mode(s): {', '.join(invalid)}")
-    return modes or ["idm", "idm_flux", "catvton", "klein_lora"]
+    return modes or ["idm", "idm_flux", "idm_mask_expanded", "idm_mask_expanded_flux", "klein_lora"]
 
 
 def _load_legacy_sample(args: argparse.Namespace) -> list[EvalSample]:
@@ -151,17 +163,22 @@ def _load_legacy_sample(args: argparse.Namespace) -> list[EvalSample]:
 
 def _mode_settings(settings, mode: str, mock: bool):
     mode_settings = settings.model_copy(deep=True)
-    if mode in {"idm", "idm_flux", "repair"}:
+    if mode in {"idm", "idm_flux", "idm_mask_expanded", "idm_mask_expanded_flux", "repair"}:
         mode_settings.pipeline.engine = "mock" if mock else "idm_vton"
+        mode_settings.mask_experiments.upper_body_expand_hem.enabled = mode in {
+            "idm_mask_expanded",
+            "idm_mask_expanded_flux",
+        }
     elif mode == "catvton":
         mode_settings.pipeline.engine = "catvton"
     elif mode == "klein_lora":
         mode_settings.pipeline.engine = "klein_tryon_lora"
+        mode_settings.klein_tryon_lora.enabled = True
     return mode_settings
 
 
 def _mode_flags(mode: str) -> tuple[bool, bool]:
-    if mode == "idm_flux":
+    if mode in {"idm_flux", "idm_mask_expanded_flux"}:
         return True, False
     if mode == "repair":
         return True, True
@@ -217,12 +234,23 @@ def _skip_row(sample: EvalSample, mode: str, sample_dir: Path, benchmark_dir: Pa
     mode_dir = sample_dir / mode
     mode_dir.mkdir(parents=True, exist_ok=True)
     (mode_dir / "skip_reason.txt").write_text(reason, encoding="utf-8")
+    status_payload = {
+        "status": "unavailable",
+        "engine": mode,
+        "error_code": "ENGINE_UNAVAILABLE",
+        "message": reason,
+    }
+    (mode_dir / "status.json").write_text(json.dumps(status_payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return {
         "sample_id": sample.sample_id,
         "mode": mode,
         "status": "unavailable",
         "runtime_seconds": round(time.perf_counter() - started, 3),
+        "result_path": None,
         "output_path": None,
+        "prompt_path": None,
+        "engine_status": reason,
+        "error_code": "ENGINE_UNAVAILABLE",
         "mode_dir": _display_path(mode_dir, benchmark_dir),
         "sample_dir": _display_path(sample_dir, benchmark_dir),
         "quality_report_path": None,
@@ -271,13 +299,21 @@ def _run_mode(
         result_path = storage.file_path_from_public_url(response.result_url) if response.result_url else None
         quality_path = mode_dir / "quality_report.json"
         metadata_path = mode_dir / "metadata.json"
+        prompt_path = mode_dir / "prompt.txt"
         report = json.loads(quality_path.read_text(encoding="utf-8")) if quality_path.exists() else None
+        engine_status = ""
+        if report and isinstance(report.get("engine_status"), dict):
+            engine_status = json.dumps(report["engine_status"], sort_keys=True)
         row = {
             "sample_id": sample.sample_id,
             "mode": mode,
             "status": response.status,
             "runtime_seconds": round(time.perf_counter() - started, 3),
+            "result_path": _display_path(result_path, benchmark_dir) if result_path else None,
             "output_path": _display_path(result_path, benchmark_dir) if result_path else None,
+            "prompt_path": _display_path(prompt_path, benchmark_dir) if prompt_path.exists() else None,
+            "engine_status": engine_status or response.status,
+            "error_code": None,
             "mode_dir": _display_path(mode_dir, benchmark_dir),
             "sample_dir": _display_path(sample_dir, benchmark_dir),
             "quality_report_path": _display_path(quality_path, benchmark_dir) if quality_path.exists() else None,
@@ -293,13 +329,14 @@ def _run_mode(
         (mode_dir / "benchmark_error.txt").write_text(str(exc), encoding="utf-8")
         row = _skip_row(sample, mode, sample_dir, benchmark_dir, input_paths, f"failed: {exc}", started)
         row["status"] = "failed"
+        row["error_code"] = "TRYON_ERROR"
         return row, None
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark Virtual Try-On engines on a golden eval set.")
     parser.add_argument("--eval-set", default=None, help="Golden evaluation set folder.")
-    parser.add_argument("--modes", default="idm,idm_flux,catvton,klein_lora")
+    parser.add_argument("--modes", default="idm,idm_flux,idm_mask_expanded,idm_mask_expanded_flux,klein_lora")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", default=None)
     parser.add_argument("--person", default=None, help="Legacy single person image fallback.")

@@ -42,7 +42,7 @@ Run:
 cd virtual_tryon
 python scripts/benchmark_pipeline.py \
   --eval-set data/eval_set \
-  --modes idm,idm_flux,catvton,klein_lora \
+  --modes idm,idm_flux,idm_mask_expanded,idm_mask_expanded_flux,klein_lora \
   --limit 1 \
   --output data/outputs/benchmark_phase6_test
 ```
@@ -51,9 +51,11 @@ Modes:
 
 - `idm`: IDM-VTON core only.
 - `idm_flux`: IDM-VTON plus optional FLUX refiner.
+- `idm_mask_expanded`: IDM-VTON with the experimental upper-body hem expansion enabled for that run only.
+- `idm_mask_expanded_flux`: expanded-mask IDM-VTON plus optional FLUX refiner.
 - `repair`: IDM-VTON plus accepted FLUX output plus repair.
 - `catvton`: CatVTON baseline.
-- `klein_lora`: Klein Try-On LoRA baseline.
+- `klein_lora`: fal.ai FLUX.2 Klein 9B Try-On LoRA experimental baseline.
 
 If a baseline engine is unavailable, its row is marked `unavailable` and the benchmark continues.
 
@@ -73,9 +75,13 @@ data/outputs/benchmark_{timestamp}/
     run_metadata.json
     idm/
     idm_flux/
+    idm_mask_expanded/
+    idm_mask_expanded_flux/
     catvton/
     klein_lora/
 ```
+
+`klein_lora` rows include `prompt_path`, `engine_status`, and `error_code`. When `FAL_KEY` or `fal_client` is missing, the row is skipped with `ENGINE_UNAVAILABLE`; this is expected on CI and local CPU-only environments.
 
 ## Review Gallery
 
@@ -134,3 +140,28 @@ data/outputs/ablation_upper_body_mask_test/
 The expanded variant also saves original, expanded, and difference masks plus overlays. The FLUX variant uses `safe_refine_mask.png`, falling back to `boundary_refine_mask.png`, and never refines the whole image. If the local FLUX backend is unavailable or runs out of memory, the row is marked skipped and the core comparison remains usable.
 
 Do not enable the expanded mask by default based on automated metrics alone. Merge it only after manual review confirms stronger old-garment removal without weaker identity, pose, background, or garment shape.
+
+## Klein LoRA Ablation
+
+Run the dedicated LoRA comparison:
+
+```bash
+python scripts/run_klein_lora_ablation.py \
+  --sample data/eval_set/sample_001 \
+  --seed 42 \
+  --bottom-strategy crop_from_person \
+  --output data/outputs/klein_lora_ablation_test
+```
+
+Without `FAL_KEY`, the script still creates `summary.csv`, `summary.json`, `comparison_grid.png`, `comparison_index.html`, and `manual_ratings_klein_lora.csv`; Klein rows are marked unavailable and include sanitized status artifacts. With `FAL_KEY` and the fal client installed, the same command attempts the real endpoint.
+
+The comparison grid contains:
+
+- Person input.
+- Top garment reference.
+- Auto bottom reference.
+- IDM original.
+- Klein LoRA default prompt.
+- Klein LoRA strong prompt.
+
+Use `manual_ratings_klein_lora.csv` for subjective scoring. Do not promote Klein LoRA to the default engine unless it wins or ties IDM-VTON on multiple eval samples while preserving identity, pose, body shape, and background.

@@ -68,7 +68,15 @@ If `use_refiner=true` but FLUX is unavailable or fails, the job remains `complet
 
 `quality_report.json` contains only signals that the code can compute or verify from the available images and masks. It must not contain subjective claims such as "identity looks good", "the old shirt is visible", or human 1-5 ratings unless a detector or metric is implemented for that claim.
 
-Subjective observations belong in the benchmark's `manual_ratings.csv` or the mask ablation's `manual_ratings_mask_ablation.csv`. Human reviewers should score identity, garment fidelity, old-garment removal, realism, pose preservation, over-editing, and the winning variant there.
+Subjective observations belong in the benchmark's `manual_ratings.csv`, the mask ablation's `manual_ratings_mask_ablation.csv`, or the Klein LoRA ablation's `manual_ratings_klein_lora.csv`. Human reviewers should score identity, garment fidelity, old-garment removal, realism, pose preservation, over-editing, and the winning variant there.
+
+Klein LoRA manual ratings use this schema:
+
+```text
+sample_id,variant,result_path,identity_1_5,garment_fidelity_1_5,old_garment_removed_1_5,realism_1_5,pose_preservation_1_5,body_shape_preservation_1_5,background_preservation_1_5,overedit_1_5,winner,notes
+```
+
+The template auto-fills only sample, variant, and path fields. Human scores and notes stay blank until a reviewer fills them in.
 
 ## Benchmark
 
@@ -109,7 +117,7 @@ For golden-set benchmarking, prefer:
 ```bash
 python scripts/benchmark_pipeline.py \
   --eval-set data/eval_set \
-  --modes idm,idm_flux,catvton,klein_lora \
+  --modes idm,idm_flux,idm_mask_expanded,idm_mask_expanded_flux,klein_lora \
   --limit 1 \
   --output data/outputs/benchmark_phase6_test
 ```

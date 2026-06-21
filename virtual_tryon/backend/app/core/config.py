@@ -80,13 +80,18 @@ class EngineConfig(BaseModel):
     enabled: bool = True
     backend: str = "disabled"
     fallback_to_core: bool = True
+    fallback_on_error: bool = True
     repo_path: Path | None = None
     checkpoint_dir: Path | None = None
     entrypoint: Path | None = None
     model_name: str | None = None
     model_path: Path | None = None
     base_model: str | None = None
+    lora_repo: str | None = None
+    lora_weight_api: str | None = None
+    lora_weight_comfy: str | None = None
     lora_path: Path | None = None
+    fal_endpoint: str | None = None
     quantized: bool = False
     remote_text_encoder: bool = False
     max_retries: int = 1
@@ -95,9 +100,15 @@ class EngineConfig(BaseModel):
     default_width: int = 768
     default_height: int = 1024
     steps: int = 30
+    num_inference_steps: int | None = None
     guidance_scale: float = 2.0
     default_strength: float = 0.35
     lora_scale: float = 1.0
+    resolution: int = 1024
+    require_three_images: bool = False
+    bottom_strategy: str = "skip"
+    bottom_crop: dict[str, Any] = Field(default_factory=dict)
+    timeout_seconds: int = 900
 
 
 class RepairConfig(BaseModel):

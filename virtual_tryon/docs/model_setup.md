@@ -68,6 +68,10 @@ Important fields:
 - `flux_refiner.checkpoint_dir`
 - `flux_refiner.api_url_env`
 - `flux_refiner.api_key_env`
+- `klein_tryon_lora.backend`
+- `klein_tryon_lora.fal_endpoint`
+- `klein_tryon_lora.lora_repo`
+- `klein_tryon_lora.lora_weight_api`
 - `klein_tryon_lora.lora_path`
 
 `flux_refiner.backend` supports:
@@ -202,8 +206,32 @@ Klein Try-On LoRA is also benchmark-only by default:
 ```yaml
 klein_tryon_lora:
   enabled: false
+  backend: "fal_api"
   base_model: "black-forest-labs/FLUX.2-klein-9B"
+  lora_repo: "fal/flux-klein-9b-virtual-tryon-lora"
+  lora_weight_api: "flux-klein-tryon.safetensors"
+  fal_endpoint: "fal-ai/flux-2/klein/9b/base/edit/lora"
   lora_path: "./models/loras/flux-klein-tryon.safetensors"
 ```
 
-Benchmark logs include the final `TRYON ...` prompt. If the LoRA file or execution backend is missing, the benchmark row is marked unavailable instead of crashing.
+`enabled: false` keeps IDM-VTON as the production default. Selecting `klein_lora` in the benchmark, ablation script, or optional API `engine_mode` explicitly opts into the experimental adapter.
+
+For the fal.ai backend, set credentials only in the shell environment:
+
+```bash
+export FAL_KEY="..."
+```
+
+Do not write `FAL_KEY`, `HF_TOKEN`, or API keys into `.env`, docs, logs, outputs, or committed files. The adapter sanitizes request and response JSON before saving artifacts.
+
+The LoRA endpoint expects three images: person, top garment, and bottom garment. For upper-body samples without a bottom garment reference, the adapter defaults to:
+
+```yaml
+bottom_strategy: "crop_from_person"
+```
+
+This crops the lower-body region from the person image, saves `auto_bottom_reference.png`, and records that the bottom reference was auto-cropped. `blank_placeholder` and `skip` are available for controlled experiments.
+
+Optional local Diffusers support is represented by `backend: "diffusers_local"`, but it is not a default runtime path. It requires a locally available FLUX.2 Klein base model and LoRA weights. The project does not auto-download gated base models unless the user explicitly chooses to do that setup.
+
+Benchmark logs include the final `TRYON ...` prompt. If credentials, dependencies, model access, or the execution backend are missing, the benchmark row is marked unavailable instead of crashing.

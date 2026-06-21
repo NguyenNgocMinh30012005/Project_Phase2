@@ -114,6 +114,16 @@ def test_manual_rating_not_written_to_quality_report(mock_ablation_output):
     assert "original pink shirt remains visible" not in serialized
 
 
+def test_manual_observations_not_written_to_quality_report(mock_ablation_output):
+    output_dir, _ = mock_ablation_output
+    quality_path = output_dir / "idm_mask_expanded" / "quality_report.json"
+    report = json.loads(quality_path.read_text(encoding="utf-8"))
+    serialized = json.dumps(report).lower()
+    assert "old_garment_removed_1_5" not in serialized
+    assert "pink shirt remains visible" not in serialized
+    assert "subjective" not in serialized
+
+
 def test_flux_local_refine_skips_cleanly_when_unavailable(tmp_path):
     sample, issues = validate_sample(SAMPLE_DIR)
     assert sample is not None, issues

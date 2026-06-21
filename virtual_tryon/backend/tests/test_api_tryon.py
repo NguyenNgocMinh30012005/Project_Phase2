@@ -52,6 +52,46 @@ def test_tryon_accepts_upper_body_request(client, png_file):
     assert payload["debug"]["mask_url"]
 
 
+def test_engine_mode_default_remains_idm(client, png_file):
+    api = TestClient(client)
+    response = api.post(
+        "/tryon",
+        data={"category": "upper_body", "use_refiner": "false", "repair_mode": "false"},
+        files={
+            "person_image": png_file("person.png", (170, 170, 170)),
+            "garment_top": png_file("top.png", (20, 80, 210)),
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["result_url"]
+
+
+def test_engine_mode_klein_lora_unavailable_clean_error(client, png_file, monkeypatch):
+    monkeypatch.delenv("FAL_KEY", raising=False)
+    api = TestClient(client)
+    response = api.post(
+        "/tryon",
+        data={
+            "category": "upper_body",
+            "engine_mode": "klein_lora",
+            "use_refiner": "false",
+            "repair_mode": "false",
+        },
+        files={
+            "person_image": png_file("person.png", (170, 170, 170)),
+            "garment_top": png_file("top.png", (20, 80, 210)),
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "failed"
+    assert payload["error_code"] == "ENGINE_UNAVAILABLE"
+    assert "Klein Try-On LoRA" in payload["error"]
+    assert "Traceback" not in payload["error"]
+
+
 def test_tryon_api_error_shape(monkeypatch, png_file):
     monkeypatch.setenv("TRYON_ENGINE", "idm_vton")
     from app.core.config import clear_settings_cache

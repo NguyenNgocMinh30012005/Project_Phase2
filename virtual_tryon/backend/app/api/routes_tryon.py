@@ -57,10 +57,17 @@ async def create_tryon(
     use_refiner: Annotated[bool, Form()] = True,
     repair_mode: Annotated[bool, Form()] = True,
     run_mode: Annotated[str | None, Form()] = None,
+    engine_mode: Annotated[str | None, Form()] = None,
     seed: Annotated[int | None, Form()] = None,
 ) -> TryOnStatusResponse:
     if not any([garment_top, garment_bottom, garment_dress]):
         raise ApiError("INVALID_REQUEST", "At least one garment image is required.", status_code=400)
+    if engine_mode and engine_mode not in {"idm_vton", "idm_vton_flux", "klein_lora"}:
+        raise ApiError(
+            "INVALID_REQUEST",
+            "engine_mode must be one of: idm_vton, idm_vton_flux, klein_lora.",
+            status_code=400,
+        )
 
     person = await _read_upload(person_image)
     top = await _read_upload(garment_top)
@@ -80,6 +87,7 @@ async def create_tryon(
         use_refiner=use_refiner,
         repair_mode=repair_mode,
         seed=seed,
+        engine_mode=engine_mode,
     )
     settings = get_settings()
     selected_run_mode = (run_mode or settings.api.run_mode).lower()
