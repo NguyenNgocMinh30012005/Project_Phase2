@@ -83,7 +83,9 @@ def test_idm_vton_run_with_monkeypatched_subprocess(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    response = IDMVTonEngine(settings.idm_vton).run(_make_inputs(tmp_path / "job"))
+    engine = IDMVTonEngine(settings.idm_vton)
+    monkeypatch.setattr(engine, "missing_requirements", lambda: [])
+    response = engine.run(_make_inputs(tmp_path / "job"))
     assert response.image.size == (768, 1024)
     assert (tmp_path / "job" / "core_output.png").exists()
     assert (tmp_path / "job" / "idm_vton_command.txt").exists()

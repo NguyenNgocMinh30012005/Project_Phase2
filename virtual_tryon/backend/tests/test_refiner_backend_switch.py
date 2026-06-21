@@ -12,7 +12,8 @@ def test_flux_refiner_disabled_backend_is_unavailable():
     assert engine.is_available() is False
 
 
-def test_flux_refiner_local_backend_reports_missing_model(tmp_path):
+def test_flux_refiner_local_backend_reports_missing_model(tmp_path, monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: object())
     engine = FluxRefinerEngine(
         EngineConfig(enabled=True, backend="flux2_dev", model_name=None, checkpoint_dir=tmp_path / "missing")
     )
