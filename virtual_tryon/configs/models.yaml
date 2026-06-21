@@ -1,0 +1,39 @@
+device: cuda
+precision: bf16
+
+idm_vton:
+  enabled: true
+  repo_path: "./third_party/IDM-VTON"
+  checkpoint_dir: "./models/idm_vton"
+  default_width: 768
+  default_height: 1024
+  steps: 30
+  guidance_scale: 2.0
+  entrypoint: null
+
+flux_refiner:
+  enabled: true
+  model_name: "black-forest-labs/FLUX.2-dev"
+  checkpoint_dir: "./models/flux2"
+  default_strength: 0.35
+  steps: 20
+  guidance_scale: 2.0
+
+catvton:
+  enabled: false
+  repo_path: "./third_party/CatVTON"
+  checkpoint_dir: "./models/catvton"
+  entrypoint: null
+
+klein_tryon_lora:
+  enabled: false
+  base_model: "black-forest-labs/FLUX.2-klein-9B"
+  lora_path: "./models/loras/flux-klein-tryon.safetensors"
+  steps: 28
+  guidance_scale: 2.5
+  lora_scale: 1.0
+
+repair:
+  enabled: true
+  mask_dilation_px: 16
+  mask_blur_radius: 8

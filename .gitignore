@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+.env
+.env.*
+
+# Runtime data
+virtual_tryon/data/inputs/*
+virtual_tryon/data/outputs/*
+virtual_tryon/data/temp/*
+!virtual_tryon/data/inputs/.gitkeep
+!virtual_tryon/data/outputs/.gitkeep
+!virtual_tryon/data/temp/.gitkeep
+
+# Model weights and third-party clones
+virtual_tryon/models/
+virtual_tryon/third_party/
+
+# Local references and setup helpers can be committed intentionally if desired.

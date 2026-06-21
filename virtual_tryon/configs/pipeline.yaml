@@ -1,0 +1,18 @@
+quality:
+  min_output_width: 256
+  min_output_height: 256
+  background_change_threshold: 0.18
+  garment_change_threshold: 0.04
+  artifact_threshold: 0.35
+
+refinement:
+  refine_only_masked_region: true
+  preserve_face: true
+  preserve_background: true
+  default_prompt: "Refine garment boundaries, fabric folds, lighting, texture, sleeves, collar, and hemline while preserving identity, face, pose, body shape, hair, hands, and background."
+
+repair_regions:
+  - collar
+  - sleeve
+  - hand_overlap
+  - hemline

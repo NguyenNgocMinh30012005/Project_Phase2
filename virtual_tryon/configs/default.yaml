@@ -1,0 +1,28 @@
+app:
+  name: "Virtual Try-On"
+  environment: "development"
+  debug: true
+
+storage:
+  inputs_dir: "data/inputs"
+  outputs_dir: "data/outputs"
+  temp_dir: "data/temp"
+  public_outputs_prefix: "/outputs"
+
+image:
+  max_side: 1536
+  output_width: 768
+  output_height: 1024
+
+preprocessing:
+  dilation_px: 18
+  blur_radius: 8
+  preserve_face: true
+  preserve_hands: true
+  preserve_hair: true
+
+pipeline:
+  engine: "idm_vton"
+  allow_mock_engine: false
+  save_intermediates: true
+  fail_on_missing_core_model: true
