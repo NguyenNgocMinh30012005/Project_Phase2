@@ -14,6 +14,8 @@ class DebugUrls(BaseModel):
     agnostic_url: str | None = None
     core_output_url: str | None = None
     refined_output_url: str | None = None
+    quality_report_url: str | None = None
+    refine_mask_url: str | None = None
 
 
 class QualityScores(BaseModel):

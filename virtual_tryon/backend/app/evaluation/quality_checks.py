@@ -21,6 +21,101 @@ def _mean_abs_diff(a: Image.Image, b: Image.Image, mask: Image.Image | None = No
     return float(diff.mean())
 
 
+def _artifact_heuristic(image: Image.Image, config: QualityConfig) -> tuple[float, list[str]]:
+    notes: list[str] = []
+    if image.width < config.min_output_width or image.height < config.min_output_height:
+        notes.append("Output resolution is below configured minimum.")
+
+    arr = np.array(image.convert("RGB"), dtype=np.float32) / 255.0
+    mean = float(arr.mean())
+    std = float(arr.std())
+    if mean < 0.03:
+        notes.append("Output image is too dark or blank.")
+    if std < 0.015:
+        notes.append("Output image has very low color variation.")
+    score = max(0.0, min(1.0, 1.0 - (len(notes) * 0.35)))
+    return score, notes
+
+
+def evaluate_output_quality(
+    person_image: Image.Image,
+    output_image: Image.Image,
+    garment_mask: Image.Image,
+    config: QualityConfig,
+) -> dict:
+    notes: list[str] = []
+    background_mask = invert(garment_mask)
+    background_change = _mean_abs_diff(person_image, output_image, background_mask)
+    background_preservation = max(0.0, 1.0 - background_change)
+    garment_change = _mean_abs_diff(person_image, output_image, garment_mask)
+    over_edit_score = background_change
+    artifact_score, artifact_notes = _artifact_heuristic(output_image, config)
+    notes.extend(artifact_notes)
+
+    if background_change > config.background_change_threshold:
+        notes.append("Background changed more than expected outside the refine mask.")
+    if garment_change < config.garment_change_threshold:
+        notes.append("Garment region changed too little.")
+    notes.append("Face preservation score is unavailable because face parser/bbox is not wired.")
+
+    needs_refine = bool(
+        background_change > config.background_change_threshold
+        or garment_change < config.garment_change_threshold
+        or artifact_score < (1.0 - config.artifact_threshold)
+    )
+
+    return {
+        "background_preservation_score": background_preservation,
+        "face_preservation_score": None,
+        "garment_change_score": garment_change,
+        "over_edit_score": over_edit_score,
+        "artifact_heuristic_score": artifact_score,
+        "needs_refine": needs_refine,
+        "notes": notes,
+    }
+
+
+def refined_is_accepted(refined_quality: dict, config: QualityConfig) -> bool:
+    if refined_quality["artifact_heuristic_score"] is not None and refined_quality["artifact_heuristic_score"] < (
+        1.0 - config.artifact_threshold
+    ):
+        return False
+    if refined_quality["over_edit_score"] is not None and refined_quality["over_edit_score"] > config.background_change_threshold:
+        return False
+    return True
+
+
+def build_quality_report(
+    person_image: Image.Image,
+    core_image: Image.Image,
+    refined_image: Image.Image | None,
+    garment_mask: Image.Image,
+    config: QualityConfig,
+    *,
+    refine_notes: list[str] | None = None,
+) -> dict:
+    core = evaluate_output_quality(person_image, core_image, garment_mask, config)
+    refined = None
+    final_choice = "core"
+    if refined_image is not None:
+        refined = evaluate_output_quality(person_image, refined_image, garment_mask, config)
+        refined["accepted"] = refined_is_accepted(refined, config)
+        if refine_notes:
+            refined["notes"].extend(refine_notes)
+        final_choice = "refined" if refined["accepted"] else "core"
+    else:
+        refined = {
+            "background_preservation_score": None,
+            "face_preservation_score": None,
+            "garment_change_score": None,
+            "over_edit_score": None,
+            "artifact_heuristic_score": None,
+            "accepted": False,
+            "notes": refine_notes or [],
+        }
+    return {"core": core, "refined": refined, "final_choice": final_choice}
+
+
 def run_quality_checks(
     person_image: Image.Image,
     output_image: Image.Image,

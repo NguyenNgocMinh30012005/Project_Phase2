@@ -26,10 +26,14 @@ person image + garment image + category + prompt
      -> stages a one-sample VITON-HD-style dataset
      -> runs IDM-VTON inference.py through accelerate
      -> copies generated image to core_output.png
-  -> quality checks
-  -> optional FLUX refiner on garment/mask region
-  -> optional ADetailer-like local repair
-  -> save result and debug intermediates
+  -> build garment, boundary, and safe refinement masks
+  -> quality checks on core_output.png
+  -> optional FLUX refiner on the selected mask region
+     -> if FLUX is missing, OOMs, or fails to load, keep core_output.png
+  -> quality checks on refined_output.png when present
+  -> choose final result by quality gate
+  -> optional ADetailer-like local repair after an accepted refiner output
+  -> save result, quality_report.json, masks, overlays, and debug logs
 ```
 
 ## Engine Contract
@@ -70,3 +74,48 @@ is_available() -> bool
 prepare() -> None
 refine(image, mask, prompt, references=None, seed=None) -> RefineResult
 ```
+
+## Refinement Masks
+
+The pipeline writes three refiner masks for every completed core job:
+
+```text
+garment_refine_mask.png
+boundary_refine_mask.png
+safe_refine_mask.png
+garment_refine_mask_overlay.png
+boundary_refine_mask_overlay.png
+safe_refine_mask_overlay.png
+```
+
+`garment_refine_mask.png` is the soft clothing region. `boundary_refine_mask.png` is `dilate(mask) - erode(mask)` for edge repair. `safe_refine_mask.png` currently falls back to the garment mask and records a warning because face, hair, and hand parser exclusion is not wired yet.
+
+## Quality Gate
+
+Each job writes `quality_report.json`:
+
+```json
+{
+  "core": {
+    "background_preservation_score": 0.0,
+    "face_preservation_score": null,
+    "garment_change_score": 0.0,
+    "over_edit_score": 0.0,
+    "artifact_heuristic_score": 1.0,
+    "needs_refine": true,
+    "notes": []
+  },
+  "refined": {
+    "background_preservation_score": null,
+    "face_preservation_score": null,
+    "garment_change_score": null,
+    "over_edit_score": null,
+    "artifact_heuristic_score": null,
+    "accepted": false,
+    "notes": []
+  },
+  "final_choice": "core"
+}
+```
+
+The gate rejects a refined image when it over-edits outside the active mask or fails artifact heuristics. Missing parser signals produce `null` scores and notes, not crashes.

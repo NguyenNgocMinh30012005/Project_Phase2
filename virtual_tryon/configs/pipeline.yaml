@@ -6,10 +6,17 @@ quality:
   artifact_threshold: 0.35
 
 refinement:
+  enabled: true
+  mask_mode: "safe"
+  boundary_dilation_px: 18
+  boundary_erosion_px: 6
+  soft_blur_radius: 8
   refine_only_masked_region: true
   preserve_face: true
+  preserve_hands: true
+  preserve_hair: true
   preserve_background: true
-  default_prompt: "Refine only the clothing region. Preserve the person's face, hair, hands, pose, body shape, and background. Improve garment boundaries, fabric realism, folds, lighting, and texture fidelity to the reference garment."
+  default_prompt: "Refine only the clothing region. Preserve the person's face, hair, hands, pose, body shape, and background. Improve garment boundaries, fabric realism, folds, lighting, shadows, and texture fidelity to the reference garment."
 
 repair_regions:
   - collar

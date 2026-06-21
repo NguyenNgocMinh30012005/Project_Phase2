@@ -75,8 +75,15 @@ class QualityConfig(BaseModel):
 
 
 class RefinementConfig(BaseModel):
+    enabled: bool = True
+    mask_mode: str = "safe"
+    boundary_dilation_px: int = 18
+    boundary_erosion_px: int = 6
+    soft_blur_radius: int = 8
     refine_only_masked_region: bool = True
     preserve_face: bool = True
+    preserve_hands: bool = True
+    preserve_hair: bool = True
     preserve_background: bool = True
     default_prompt: str = "Refine garment boundaries while preserving identity."
 

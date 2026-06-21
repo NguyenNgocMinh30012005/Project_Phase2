@@ -39,6 +39,14 @@ bash scripts/download_idm_vton_ckpt.sh
 
 `download_idm_vton_ckpt.sh` downloads `ckpt/**` from the Hugging Face space `yisol/IDM-VTON`, copies it into `models/idm_vton/ckpt`, and verifies the four required preprocessing checkpoint files. It uses a temporary folder and does not write tokens to the repo.
 
+## Token And Model Safety
+
+- Never commit Hugging Face tokens, `.env` files, shell history, checkpoints, model weights, generated outputs, or third-party source mirrors.
+- Keep `HF_TOKEN` in the shell environment only for the current session, or use the Hugging Face CLI login cache outside the repository.
+- If a token is pasted into a chat, terminal transcript, issue, or any external system, revoke or rotate it in Hugging Face settings before continuing production work.
+- `.gitignore` must keep `virtual_tryon/models/`, `virtual_tryon/data/outputs/`, `virtual_tryon/data/temp/`, and `virtual_tryon/third_party/` out of Git.
+- Before commit, run a quick safety check such as `git status --short` and `rg -n "hf_[A-Za-z0-9_]+" .`.
+
 ## Config
 
 Edit:
@@ -94,6 +102,32 @@ agnostic.png
 cloth_mask.png
 densepose.png or densepose_placeholder.png
 ```
+
+## Baseline Suite
+
+After IDM-VTON is available, preserve a fixed baseline before adding refiners:
+
+```bash
+cd virtual_tryon
+python scripts/run_idm_baseline_suite.py
+```
+
+The script discovers paired `data/examples/person_*` and `data/examples/top_*` files, runs IDM-VTON without FLUX or repair, and writes:
+
+```text
+data/outputs/baseline_suite/{sample_id}/
+  input_person.png
+  input_garment.png
+  core_output.png
+  mask_preview.png
+  idm_vton_command.txt
+  idm_vton_stdout.txt
+  idm_vton_stderr.txt
+  run_metadata.json
+data/outputs/baseline_suite/baseline_summary.json
+```
+
+If only one or two paired samples exist, the script still runs and prints guidance to add more examples.
 
 ## Real API Test
 

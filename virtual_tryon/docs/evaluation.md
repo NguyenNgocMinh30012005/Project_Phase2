@@ -1,6 +1,6 @@
 # Evaluation
 
-The first quality checker is intentionally lightweight and deterministic. It returns:
+The first quality checker is intentionally lightweight and deterministic. The API still exposes a compact `quality` block for compatibility:
 
 ```json
 {
@@ -19,8 +19,63 @@ Implemented checks:
 - Output resolution is above configured minimum.
 - Background preservation via difference outside the garment mask.
 - Garment region change via difference inside the garment mask.
-- Boundary artifact heuristic using mask edges.
+- Over-edit score outside the active refine mask.
+- Artifact heuristic for low-resolution, blank, or low-variation outputs.
 - Rough garment similarity when a garment reference is available.
+
+Every completed core job also writes `quality_report.json`:
+
+```json
+{
+  "core": {
+    "background_preservation_score": 0.92,
+    "face_preservation_score": null,
+    "garment_change_score": 0.31,
+    "over_edit_score": 0.08,
+    "artifact_heuristic_score": 1.0,
+    "needs_refine": false,
+    "notes": ["Face preservation score is unavailable because face parser/bbox is not wired."]
+  },
+  "refined": {
+    "background_preservation_score": null,
+    "face_preservation_score": null,
+    "garment_change_score": null,
+    "over_edit_score": null,
+    "artifact_heuristic_score": null,
+    "accepted": false,
+    "notes": []
+  },
+  "final_choice": "core"
+}
+```
+
+If `use_refiner=true` but FLUX is unavailable or fails, the job remains `completed`, `final_choice` stays `core`, and the failure reason is written to `flux_refiner_error.txt` plus the refined report notes.
+
+## Benchmark
+
+Run:
+
+```bash
+cd virtual_tryon
+python scripts/benchmark_pipeline.py \
+  --person data/examples/person_001.jpg \
+  --garment data/examples/top_001.jpg \
+  --category upper_body
+```
+
+The benchmark writes:
+
+```text
+data/outputs/benchmark_{timestamp}/
+  summary.csv
+  summary.json
+  grid.png
+  sample_001_idm_vton_only/
+  sample_001_idm_vton_flux_refiner/
+  sample_001_idm_vton_flux_refiner_repair/
+```
+
+Rows include `sample_id`, `mode`, `runtime_seconds`, `output_path`, `background_preservation_score`, `face_preservation_score`, `garment_change_score`, `over_edit_score`, `final_choice`, and `notes`. The benchmark keeps running when the refiner fails, so it is safe to use while FLUX weights or compatible diffusers builds are still being prepared.
 
 Future upgrades:
 

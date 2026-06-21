@@ -94,6 +94,32 @@ python scripts/run_tryon.py \
 
 The real run does not use `--mock`. It stages a one-sample IDM-VTON dataset under `data/outputs/{job_id}/idm_vton_dataset/`, writes command/stdout/stderr logs, and copies the generated image to `core_output.png`.
 
+FLUX refinement is optional:
+
+```bash
+cd virtual_tryon
+python scripts/run_tryon.py \
+  --person data/examples/person_001.jpg \
+  --garment data/examples/top_001.jpg \
+  --category upper_body \
+  --prompt "replace the shirt with the reference garment, preserve face, pose, and body shape" \
+  --use-refiner \
+  --output data/outputs/real_idm_flux_test.png
+```
+
+If FLUX is unavailable or fails, the job remains completed and falls back to `core_output.png`. Each job writes `quality_report.json` plus garment, boundary, and safe refinement masks.
+
+Baseline and benchmark:
+
+```bash
+cd virtual_tryon
+python scripts/run_idm_baseline_suite.py
+python scripts/benchmark_pipeline.py \
+  --person data/examples/person_001.jpg \
+  --garment data/examples/top_001.jpg \
+  --category upper_body
+```
+
 ## Frontend
 
 ```bash

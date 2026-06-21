@@ -24,7 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--category", default="upper_body", choices=["upper_body", "lower_body", "dress", "full_outfit"])
     parser.add_argument("--prompt", default=None)
     parser.add_argument("--use-refiner", action="store_true")
-    parser.add_argument("--no-repair", action="store_true")
+    parser.add_argument("--repair-mode", action="store_true", help="Run local repair after an accepted refiner output.")
+    parser.add_argument("--no-repair", action="store_true", help="Deprecated compatibility flag; repair is off by default.")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--output", required=True, help="Output image path.")
     parser.add_argument("--mock", action="store_true", help="Use mock engine for end-to-end validation without checkpoints.")
@@ -53,7 +54,7 @@ def main() -> int:
         category=args.category,
         prompt=args.prompt,
         use_refiner=args.use_refiner,
-        repair_mode=not args.no_repair,
+        repair_mode=args.repair_mode and not args.no_repair,
         seed=args.seed,
     )
     try:

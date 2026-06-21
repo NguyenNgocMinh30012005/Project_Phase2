@@ -9,12 +9,13 @@ from PIL import Image
 from app.core.config import Settings
 from app.engines.base import TryOnInputs
 from app.engines.factory import create_refiner, create_repair_engine, create_tryon_engine
-from app.evaluation.quality_checks import run_quality_checks
+from app.evaluation.quality_checks import build_quality_report, run_quality_checks
 from app.preprocessing.agnostic_mask import create_agnostic_mask
 from app.preprocessing.densepose import DensePoseEstimator
 from app.preprocessing.garment_segmenter import GarmentSegmenter
 from app.preprocessing.human_parser import HumanParser
 from app.preprocessing.image_loader import fit_to_canvas
+from app.preprocessing.refine_mask import build_refine_masks, select_refine_mask
 from app.schemas.tryon import DebugUrls, QualityScores, TryOnCategory, TryOnResponse
 from app.services.storage_service import StorageService
 from app.utils.errors import InputValidationError, ModelUnavailableError
@@ -120,43 +121,76 @@ class TryOnPipeline:
             raise
 
         core_path = save_image(core.image, job_dir / "core_output.png")
-        current_image = core.image
+        core_image = core.image
+        current_image = core_image
+
+        refine_masks = build_refine_masks(person, mask_result.soft_mask, self.settings.refinement)
+        save_image(refine_masks.garment_refine_mask, job_dir / "garment_refine_mask.png")
+        save_image(refine_masks.boundary_refine_mask, job_dir / "boundary_refine_mask.png")
+        save_image(refine_masks.safe_refine_mask, job_dir / "safe_refine_mask.png")
+        save_image(refine_masks.garment_overlay, job_dir / "garment_refine_mask_overlay.png")
+        save_image(refine_masks.boundary_overlay, job_dir / "boundary_refine_mask_overlay.png")
+        save_image(refine_masks.safe_overlay, job_dir / "safe_refine_mask_overlay.png")
+        active_refine_mask = select_refine_mask(refine_masks, self.settings.refinement.mask_mode)
 
         quality: QualityScores = run_quality_checks(
             person,
-            current_image,
+            core_image,
             garment_seg.normalized_crop,
-            mask_result.soft_mask,
+            active_refine_mask,
             self.settings.quality,
         )
 
         refined_path: Path | None = None
-        if request.use_refiner and (quality.needs_refine or self.settings.flux_refiner.enabled):
+        refined_image: Image.Image | None = None
+        refine_notes = list(refine_masks.notes)
+        if request.use_refiner and self.settings.refinement.enabled and self.settings.flux_refiner.enabled:
             refiner = create_refiner(self.settings)
             try:
                 refined = refiner.refine(
-                    current_image,
-                    mask_result.soft_mask,
+                    core_image,
+                    active_refine_mask,
                     prompt,
                     references={"person": person, "garment": garment_seg.normalized_crop},
                     seed=seed,
                 )
-                current_image = refined.image
-                refined_path = save_image(current_image, job_dir / "refined_output.png")
+                refined_image = refined.image
+                refined_path = save_image(refined_image, job_dir / "refined_output.png")
             except ModelUnavailableError as exc:
-                quality.notes.append(str(exc))
+                message = f"Refiner unavailable; returning core output. {exc}"
+                quality.notes.append(message)
+                refine_notes.append(message)
+                (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
                 logger.warning("Skipping refiner: %s", exc)
             except Exception as exc:
-                quality.notes.append(f"Refiner failed; returning core output. {exc}")
+                message = f"Refiner failed; returning core output. {exc}"
+                quality.notes.append(message)
+                refine_notes.append(message)
+                (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
                 logger.exception("Refiner failed; falling back to core output.")
 
-        if request.repair_mode and self.settings.repair.enabled:
+        quality_report = build_quality_report(
+            person,
+            core_image,
+            refined_image,
+            active_refine_mask,
+            self.settings.quality,
+            refine_notes=refine_notes,
+        )
+        if quality_report["final_choice"] == "refined" and refined_image is not None:
+            current_image = refined_image
+        else:
+            current_image = core_image
+
+        if request.repair_mode and self.settings.repair.enabled and refined_image is not None and quality_report["final_choice"] == "refined":
             repair_engine = create_repair_engine(self.settings)
-            repaired = repair_engine.refine(current_image, mask_result.dilated_mask, prompt, seed=seed)
+            repaired = repair_engine.refine(current_image, active_refine_mask, prompt, seed=seed)
             current_image = repaired.image
             refined_path = save_image(current_image, job_dir / "refined_output.png")
+            quality_report["repair"] = repaired.metadata
 
         result_path = save_image(current_image, job_dir / "result.png")
+        quality_report_path = self.storage.save_json(request.job_id, "quality_report.json", quality_report)
         metadata = {
             "job_id": request.job_id,
             "seed": seed,
@@ -164,6 +198,7 @@ class TryOnPipeline:
             "engine": getattr(engine, "name", "unknown"),
             "prompt": prompt,
             "quality": quality.model_dump(),
+            "quality_report": quality_report,
             "core_metadata": core.metadata,
         }
         self.storage.save_json(request.job_id, "metadata.json", metadata)
@@ -177,6 +212,8 @@ class TryOnPipeline:
                 agnostic_url=self.storage.public_url(job_dir / "agnostic.png"),
                 core_output_url=self.storage.public_url(core_path),
                 refined_output_url=self.storage.public_url(refined_path),
+                quality_report_url=self.storage.public_url(quality_report_path),
+                refine_mask_url=self.storage.public_url(job_dir / "safe_refine_mask_overlay.png"),
             ),
             quality=quality,
             seed=seed,

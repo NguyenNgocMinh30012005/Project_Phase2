@@ -41,13 +41,34 @@ Response:
     "mask_url": "/outputs/abc/mask_preview.png",
     "agnostic_url": "/outputs/abc/agnostic.png",
     "core_output_url": "/outputs/abc/core_output.png",
-    "refined_output_url": "/outputs/abc/refined_output.png"
+    "refined_output_url": "/outputs/abc/refined_output.png",
+    "quality_report_url": "/outputs/abc/quality_report.json",
+    "refine_mask_url": "/outputs/abc/safe_refine_mask_overlay.png"
   },
   "seed": 123
 }
 ```
 
 If the core model is missing, the job returns `status: failed` and a clear `error` string.
+
+If `use_refiner=true` and the FLUX refiner is missing, incompatible, or runs out of memory, the job still returns `status: completed` with `result_url` pointing to the IDM-VTON core output. The output folder includes `flux_refiner_error.txt` and `quality_report.json` explaining the fallback. Raw stack traces are not returned in the API response. Repair runs only after a refined output is created and accepted by the quality gate.
+
+Important output files:
+
+```text
+core_output.png
+result.png
+quality_report.json
+garment_refine_mask.png
+boundary_refine_mask.png
+safe_refine_mask.png
+garment_refine_mask_overlay.png
+boundary_refine_mask_overlay.png
+safe_refine_mask_overlay.png
+idm_vton_command.txt
+idm_vton_stdout.txt
+idm_vton_stderr.txt
+```
 
 Example missing-model response:
 
