@@ -61,9 +61,30 @@ Important fields:
 - `idm_vton.repo_path`
 - `idm_vton.entrypoint`
 - `idm_vton.model_name`
+- `flux_refiner.backend`
 - `flux_refiner.model_name`
+- `flux_refiner.model_path`
 - `flux_refiner.checkpoint_dir`
+- `flux_refiner.api_url_env`
+- `flux_refiner.api_key_env`
 - `klein_tryon_lora.lora_path`
+
+`flux_refiner.backend` supports:
+
+- `disabled`
+- `flux2_dev`
+- `flux2_klein`
+- `flux2_api`
+- `fal_tryon_lora`
+
+For API backends, set credentials through environment variables only:
+
+```bash
+export FLUX_REFINER_API_URL="https://example.invalid/refine"
+export FLUX_REFINER_API_KEY="..."
+```
+
+Do not store API keys or Hugging Face tokens in the repo. If a token was pasted into an external system, revoke or rotate it.
 
 ## Check IDM-VTON
 
@@ -158,3 +179,30 @@ The file exists but is probably a Git LFS pointer or placeholder. Replace it wit
 `CatVTON checkpoint not found at ...`
 
 CatVTON is a baseline engine. Keep it disabled until weights and an entrypoint are configured.
+
+## CatVTON Baseline
+
+CatVTON is benchmark-only by default:
+
+```yaml
+catvton:
+  enabled: false
+  repo_path: "./third_party/CatVTON"
+  checkpoint_dir: "./models/catvton"
+  entrypoint: null
+```
+
+Clone or install CatVTON under `third_party/CatVTON`, place weights under `models/catvton`, and set `entrypoint` before enabling it. Both `third_party/` and `models/` are ignored by Git.
+
+## Klein Try-On LoRA Baseline
+
+Klein Try-On LoRA is also benchmark-only by default:
+
+```yaml
+klein_tryon_lora:
+  enabled: false
+  base_model: "black-forest-labs/FLUX.2-klein-9B"
+  lora_path: "./models/loras/flux-klein-tryon.safetensors"
+```
+
+Benchmark logs include the final `TRYON ...` prompt. If the LoRA file or execution backend is missing, the benchmark row is marked unavailable instead of crashing.

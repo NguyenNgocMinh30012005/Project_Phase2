@@ -19,3 +19,4 @@ uvicorn app.main:app --reload
 - Every job writes intermediates to `data/outputs/{job_id}/`.
 - `use_refiner=true` is best-effort: FLUX load/OOM/runtime failures are logged and the job falls back to `core_output.png`.
 - Every completed core job writes `quality_report.json` and refine mask overlays for debugging.
+- `/health` returns detailed model status strings; benchmark baselines can be unavailable without affecting the default IDM-VTON API.

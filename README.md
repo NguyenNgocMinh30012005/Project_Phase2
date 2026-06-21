@@ -109,16 +109,22 @@ python scripts/run_tryon.py \
 
 If FLUX is unavailable or fails, the job remains completed and falls back to `core_output.png`. Each job writes `quality_report.json` plus garment, boundary, and safe refinement masks.
 
-Baseline and benchmark:
+Baseline, eval-set benchmark, and review gallery:
 
 ```bash
 cd virtual_tryon
 python scripts/run_idm_baseline_suite.py
+python scripts/validate_eval_set.py --eval-set data/eval_set
 python scripts/benchmark_pipeline.py \
-  --person data/examples/person_001.jpg \
-  --garment data/examples/top_001.jpg \
-  --category upper_body
+  --eval-set data/eval_set \
+  --modes idm,idm_flux,catvton,klein_lora \
+  --limit 1 \
+  --output data/outputs/benchmark_phase6_test
+python scripts/build_review_gallery.py \
+  --benchmark-dir data/outputs/benchmark_phase6_test
 ```
+
+IDM-VTON remains the default core engine. FLUX is an optional refiner with core-output fallback. CatVTON and Klein Try-On LoRA are benchmark baselines and are skipped clearly when their checkpoints or backends are unavailable.
 
 ## Frontend
 

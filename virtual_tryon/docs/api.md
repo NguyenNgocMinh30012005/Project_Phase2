@@ -9,12 +9,14 @@ Returns service status, detected device, and model availability.
   "status": "ok",
   "device": "cuda:NVIDIA GeForce RTX 3090 Ti",
   "models": {
-    "idm_vton": "missing",
-    "flux_refiner": "available",
-    "catvton": "missing"
+    "idm_vton": "available",
+    "flux_refiner": "unavailable: license/access not accepted or model is private",
+    "catvton": "unavailable: catvton.enabled is false"
   }
 }
 ```
+
+Model status strings may include detailed skip reasons. IDM-VTON is the default core API engine; CatVTON and Klein LoRA are benchmark baselines unless explicitly configured.
 
 ## POST /tryon
 
@@ -69,6 +71,8 @@ idm_vton_command.txt
 idm_vton_stdout.txt
 idm_vton_stderr.txt
 ```
+
+`quality_report.json` includes `engine_status`, `final_choice`, and `final_choice_reason`. For model comparison across CatVTON/Klein baselines, use `scripts/benchmark_pipeline.py` instead of the default `/tryon` API.
 
 Example missing-model response:
 

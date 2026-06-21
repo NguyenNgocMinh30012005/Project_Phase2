@@ -23,7 +23,8 @@ def _mean_abs_diff(a: Image.Image, b: Image.Image, mask: Image.Image | None = No
 
 def _artifact_heuristic(image: Image.Image, config: QualityConfig) -> tuple[float, list[str]]:
     notes: list[str] = []
-    if image.width < config.min_output_width or image.height < config.min_output_height:
+    resolution_ok = image.width >= config.min_output_width and image.height >= config.min_output_height
+    if not resolution_ok:
         notes.append("Output resolution is below configured minimum.")
 
     arr = np.array(image.convert("RGB"), dtype=np.float32) / 255.0
@@ -35,6 +36,19 @@ def _artifact_heuristic(image: Image.Image, config: QualityConfig) -> tuple[floa
         notes.append("Output image has very low color variation.")
     score = max(0.0, min(1.0, 1.0 - (len(notes) * 0.35)))
     return score, notes
+
+
+def _basic_image_checks(image: Image.Image, config: QualityConfig) -> dict:
+    arr = np.array(image.convert("RGB"), dtype=np.float32) / 255.0
+    mean = float(arr.mean())
+    std = float(arr.std())
+    return {
+        "blank_or_corrupt_check": "fail" if mean < 0.03 else "pass",
+        "color_collapse_check": "fail" if std < 0.015 else "pass",
+        "output_resolution_check": (
+            "pass" if image.width >= config.min_output_width and image.height >= config.min_output_height else "fail"
+        ),
+    }
 
 
 def evaluate_output_quality(
@@ -68,10 +82,13 @@ def evaluate_output_quality(
         "background_preservation_score": background_preservation,
         "face_preservation_score": None,
         "garment_change_score": garment_change,
+        "outside_mask_delta": background_change,
+        "garment_region_delta": garment_change,
         "over_edit_score": over_edit_score,
         "artifact_heuristic_score": artifact_score,
         "needs_refine": needs_refine,
         "notes": notes,
+        **_basic_image_checks(output_image, config),
     }
 
 
@@ -93,27 +110,55 @@ def build_quality_report(
     config: QualityConfig,
     *,
     refine_notes: list[str] | None = None,
+    baselines: dict | None = None,
+    engine_status: dict | None = None,
 ) -> dict:
     core = evaluate_output_quality(person_image, core_image, garment_mask, config)
     refined = None
     final_choice = "core"
+    final_choice_reason = "core output is the only accepted image"
     if refined_image is not None:
         refined = evaluate_output_quality(person_image, refined_image, garment_mask, config)
         refined["accepted"] = refined_is_accepted(refined, config)
         if refine_notes:
             refined["notes"].extend(refine_notes)
         final_choice = "refined" if refined["accepted"] else "core"
+        final_choice_reason = (
+            "refined output passed quality gate"
+            if refined["accepted"]
+            else "refined output failed quality gate; using core output"
+        )
     else:
         refined = {
             "background_preservation_score": None,
             "face_preservation_score": None,
             "garment_change_score": None,
+            "outside_mask_delta": None,
+            "garment_region_delta": None,
             "over_edit_score": None,
             "artifact_heuristic_score": None,
+            "blank_or_corrupt_check": None,
+            "color_collapse_check": None,
+            "output_resolution_check": None,
             "accepted": False,
             "notes": refine_notes or [],
         }
-    return {"core": core, "refined": refined, "final_choice": final_choice}
+        if refine_notes:
+            final_choice_reason = "refiner unavailable or skipped; using core output"
+    return {
+        "core": core,
+        "refined": refined,
+        "baselines": baselines or {"catvton": None, "klein_lora": None},
+        "final_choice": final_choice,
+        "final_choice_reason": final_choice_reason,
+        "engine_status": engine_status
+        or {
+            "idm_vton": "success",
+            "flux_refiner": "skipped",
+            "catvton": "skipped",
+            "klein_lora": "skipped",
+        },
+    }
 
 
 def run_quality_checks(

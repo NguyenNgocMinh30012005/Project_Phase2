@@ -17,21 +17,40 @@ class CatVTonEngine:
     def __init__(self, config: EngineConfig) -> None:
         self.config = config
 
-    def is_available(self) -> bool:
+    def missing_requirements(self) -> list[str]:
+        missing: list[str] = []
+        if not self.config.enabled:
+            missing.append("catvton.enabled is false")
+        if not self.config.repo_path or not self.config.repo_path.exists():
+            missing.append(f"repo_path not found: {self.config.repo_path}")
+        if not self.config.entrypoint or not self.config.entrypoint.exists():
+            missing.append(f"entrypoint not found: {self.config.entrypoint}")
         checkpoint_dir = self.config.checkpoint_dir
-        return bool(
-            self.config.enabled
-            and checkpoint_dir
-            and checkpoint_dir.exists()
-            and any(checkpoint_dir.iterdir())
-        )
+        if not checkpoint_dir or not checkpoint_dir.exists() or not any(checkpoint_dir.iterdir()):
+            missing.append(f"checkpoint not found at {checkpoint_dir}")
+        return missing
+
+    def status(self) -> str:
+        missing = self.missing_requirements()
+        if missing:
+            return "unavailable: " + "; ".join(missing)
+        return "available"
+
+    def is_available(self) -> bool:
+        return not self.missing_requirements()
 
     def prepare(self) -> None:
-        if not self.is_available():
-            raise ModelUnavailableError(f"CatVTON checkpoint not found at {self.config.checkpoint_dir}")
+        missing = self.missing_requirements()
+        if missing:
+            raise ModelUnavailableError("CatVTON is not available. " + "; ".join(missing))
 
     def run(self, inputs: TryOnInputs) -> TryOnResult:
         self.prepare()
+        if inputs.output_dir:
+            (Path(inputs.output_dir) / "catvton_command.txt").write_text(
+                "CatVTON adapter is configured but execution command is not wired yet.",
+                encoding="utf-8",
+            )
         raise ModelUnavailableError(
             "CatVTON adapter is reserved as a baseline. Configure catvton.entrypoint before running this engine."
         )

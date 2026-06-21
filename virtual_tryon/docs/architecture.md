@@ -36,6 +36,8 @@ person image + garment image + category + prompt
   -> save result, quality_report.json, masks, overlays, and debug logs
 ```
 
+Benchmark orchestration runs the same pipeline in separate job folders for `idm`, `idm_flux`, and `repair`, and treats `catvton` and `klein_lora` as optional baseline engines. Unavailable baselines are recorded as skipped rows; they do not affect the default IDM-VTON API path.
+
 ## Engine Contract
 
 All core engines implement:
@@ -119,3 +121,5 @@ Each job writes `quality_report.json`:
 ```
 
 The gate rejects a refined image when it over-edits outside the active mask or fails artifact heuristics. Missing parser signals produce `null` scores and notes, not crashes.
+
+`quality_report.json` also includes `engine_status` and `final_choice_reason` so benchmark rows can compare completed, skipped, and failed engines without parsing raw logs.

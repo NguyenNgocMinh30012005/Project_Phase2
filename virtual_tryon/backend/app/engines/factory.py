@@ -41,5 +41,10 @@ def model_statuses(settings: Settings) -> dict[str, str]:
         "repair": ADetailerRepairEngine(settings.repair),
     }
     statuses = {"idm_vton": idm_engine.status()}
-    statuses.update({name: "available" if engine.is_available() else "missing" for name, engine in engines.items()})
+    statuses.update(
+        {
+            name: engine.status() if hasattr(engine, "status") else ("available" if engine.is_available() else "missing")
+            for name, engine in engines.items()
+        }
+    )
     return statuses

@@ -14,8 +14,16 @@ idm_vton:
 
 flux_refiner:
   enabled: true
+  backend: "flux2_dev"
+  fallback_to_core: true
   model_name: "black-forest-labs/FLUX.2-dev"
+  model_path: null
   checkpoint_dir: "./models/flux2"
+  quantized: false
+  remote_text_encoder: false
+  max_retries: 1
+  api_url_env: "FLUX_REFINER_API_URL"
+  api_key_env: "FLUX_REFINER_API_KEY"
   default_strength: 0.35
   steps: 20
   guidance_scale: 2.0

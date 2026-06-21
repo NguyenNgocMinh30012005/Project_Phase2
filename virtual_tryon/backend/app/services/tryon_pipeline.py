@@ -144,6 +144,14 @@ class TryOnPipeline:
         refined_path: Path | None = None
         refined_image: Image.Image | None = None
         refine_notes = list(refine_masks.notes)
+        core_engine_name = getattr(engine, "name", "unknown")
+        engine_status = {
+            "idm_vton": "success" if core_engine_name in {"idm_vton", "mock"} else "skipped",
+            "flux_refiner": "skipped",
+            "catvton": "success" if core_engine_name == "catvton" else "skipped",
+            "klein_lora": "success" if core_engine_name == "klein_tryon_lora" else "skipped",
+        }
+        refiner_status = "skipped"
         if request.use_refiner and self.settings.refinement.enabled and self.settings.flux_refiner.enabled:
             refiner = create_refiner(self.settings)
             try:
@@ -156,17 +164,23 @@ class TryOnPipeline:
                 )
                 refined_image = refined.image
                 refined_path = save_image(refined_image, job_dir / "refined_output.png")
+                refiner_status = "success"
+                engine_status["flux_refiner"] = "success"
             except ModelUnavailableError as exc:
                 message = f"Refiner unavailable; returning core output. {exc}"
                 quality.notes.append(message)
                 refine_notes.append(message)
                 (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
+                refiner_status = "skipped"
+                engine_status["flux_refiner"] = "skipped"
                 logger.warning("Skipping refiner: %s", exc)
             except Exception as exc:
                 message = f"Refiner failed; returning core output. {exc}"
                 quality.notes.append(message)
                 refine_notes.append(message)
                 (job_dir / "flux_refiner_error.txt").write_text(message, encoding="utf-8")
+                refiner_status = "failed"
+                engine_status["flux_refiner"] = "failed"
                 logger.exception("Refiner failed; falling back to core output.")
 
         quality_report = build_quality_report(
@@ -176,6 +190,7 @@ class TryOnPipeline:
             active_refine_mask,
             self.settings.quality,
             refine_notes=refine_notes,
+            engine_status=engine_status,
         )
         if quality_report["final_choice"] == "refined" and refined_image is not None:
             current_image = refined_image
@@ -199,6 +214,8 @@ class TryOnPipeline:
             "prompt": prompt,
             "quality": quality.model_dump(),
             "quality_report": quality_report,
+            "refiner_status": refiner_status,
+            "engine_status": engine_status,
             "core_metadata": core.metadata,
         }
         self.storage.save_json(request.job_id, "metadata.json", metadata)
