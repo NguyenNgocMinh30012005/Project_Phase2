@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Loader2, Play, X } from "lucide-react";
-import { cancelTryOnJob, getTryOnJob, submitTryOn } from "./lib/api";
+import { cancelTryOnJob, getTryOnJob, submitTryOn, TryOnApiError } from "./lib/api";
 import { ResultViewer } from "./components/ResultViewer";
 import { TryOnPreview } from "./components/TryOnPreview";
 import { UploadGarment } from "./components/UploadGarment";
@@ -12,6 +12,22 @@ import "./styles.css";
 function App() {
   const state = useTryOnStore();
   const setField = state.setField;
+
+  function displayError(error: unknown) {
+    if (error instanceof TryOnApiError) {
+      const labels: Record<string, string> = {
+        INVALID_IMAGE: "The selected file is not a valid supported image.",
+        FILE_TOO_LARGE: "The selected image exceeds the upload limit.",
+        ENGINE_UNAVAILABLE: "The try-on engine is currently unavailable.",
+        QUEUE_FULL: "The GPU queue is full. Please retry shortly.",
+        TIMEOUT: "The job exceeded the configured runtime limit.",
+        JOB_NOT_FOUND: "This job is no longer available."
+      };
+      return labels[error.code] ?? error.message;
+    }
+    if (error instanceof TypeError) return "Backend is offline or unreachable.";
+    return error instanceof Error ? error.message : String(error);
+  }
 
   async function generate() {
     state.resetResult();
@@ -31,15 +47,17 @@ function App() {
       let result = await submitTryOn(form);
       setField("result", result);
       setField("jobId", result.job_id);
-      while (result.status === "queued" || result.status === "running") {
+      while (["queued", "running", "cancel_requested"].includes(result.status)) {
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
         result = await getTryOnJob(result.job_id);
         setField("result", result);
         setField("jobId", result.job_id);
       }
-      if (result.error) setField("error", result.error);
+      if (result.error) {
+        setField("error", result.error_code === "TIMEOUT" ? "The job exceeded the configured runtime limit." : result.error);
+      }
     } catch (error) {
-      setField("error", error instanceof Error ? error.message : String(error));
+      setField("error", displayError(error));
     } finally {
       setField("loading", false);
     }
@@ -52,7 +70,7 @@ function App() {
       setField("result", result);
       if (result.error) setField("error", result.error);
     } catch (error) {
-      setField("error", error instanceof Error ? error.message : String(error));
+      setField("error", displayError(error));
     }
   }
 

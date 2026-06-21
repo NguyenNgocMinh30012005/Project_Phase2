@@ -12,6 +12,9 @@ virtual_tryon/frontend/node_modules/
 virtual_tryon/frontend/dist/
 .vite/
 virtual_tryon/frontend/.vite/
+virtual_tryon/frontend/playwright-report/
+virtual_tryon/frontend/test-results/
+virtual_tryon/frontend/blob-report/
 .env
 .env.*
 

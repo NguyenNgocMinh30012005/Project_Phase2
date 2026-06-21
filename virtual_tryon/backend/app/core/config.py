@@ -43,6 +43,18 @@ class ApiConfig(BaseModel):
     run_mode: str = "sync"
     job_poll_interval_seconds: int = 2
     max_job_runtime_seconds: int = 900
+    max_retries: int = 0
+    max_concurrent_jobs: int = 1
+    queue_policy: str = "queue"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
+    max_upload_mb: int = 20
+    allowed_image_mime_types: list[str] = Field(
+        default_factory=lambda: ["image/jpeg", "image/png", "image/webp"]
+    )
+    allow_public_artifacts: bool = True
+    artifact_ttl_hours: int = 24
 
 
 class ModelRuntimeConfig(BaseModel):

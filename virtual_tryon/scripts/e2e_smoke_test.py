@@ -60,6 +60,7 @@ def run_smoke(
             "prompt": "replace the shirt with the reference garment, preserve face, pose, and body shape",
             "use_refiner": _bool_text(use_refiner),
             "repair_mode": "false",
+            "run_mode": "async",
         }
         response = client.post(f"{api_base.rstrip('/')}/tryon", data=data, files=files)
         response.raise_for_status()

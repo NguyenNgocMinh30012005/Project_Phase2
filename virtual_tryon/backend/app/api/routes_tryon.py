@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, UploadFile
 
 from app.core.config import get_settings
 from app.engines.factory import create_refiner
@@ -10,7 +10,7 @@ from app.preprocessing.image_loader import load_image_from_bytes, validate_mime
 from app.schemas.tryon import RefineResponse, TryOnCategory, TryOnResponse, TryOnStatusResponse
 from app.services.container import get_job_service, get_storage_service
 from app.services.tryon_pipeline import PipelineRequest
-from app.utils.errors import InputValidationError, ModelUnavailableError
+from app.utils.errors import ApiError, InputValidationError, ModelUnavailableError
 from app.utils.image_io import save_image
 from app.utils.seed import normalize_seed, set_seed
 
@@ -21,10 +21,28 @@ router = APIRouter(tags=["tryon"])
 async def _read_upload(file: UploadFile | None):
     if file is None:
         return None
-    validate_mime(file.content_type, file.filename)
-    data = await file.read()
     settings = get_settings()
-    return load_image_from_bytes(data, max_side=settings.image.max_side)
+    max_bytes = settings.api.max_upload_mb * 1024 * 1024
+    try:
+        validate_mime(
+            file.content_type,
+            file.filename,
+            allowed_mime_types=set(settings.api.allowed_image_mime_types),
+        )
+    except InputValidationError as exc:
+        raise ApiError("INVALID_IMAGE", str(exc), status_code=415) from exc
+    data = await file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ApiError(
+            "FILE_TOO_LARGE",
+            f"Image exceeds the {settings.api.max_upload_mb} MB upload limit.",
+            status_code=413,
+            details={"max_upload_mb": settings.api.max_upload_mb},
+        )
+    try:
+        return load_image_from_bytes(data, max_side=settings.image.max_side)
+    except InputValidationError as exc:
+        raise ApiError("INVALID_IMAGE", "Uploaded file is not a valid image.", status_code=415) from exc
 
 
 @router.post("/tryon", response_model=TryOnStatusResponse)
@@ -42,15 +60,12 @@ async def create_tryon(
     seed: Annotated[int | None, Form()] = None,
 ) -> TryOnStatusResponse:
     if not any([garment_top, garment_bottom, garment_dress]):
-        raise HTTPException(status_code=400, detail="At least one garment image is required.")
+        raise ApiError("INVALID_REQUEST", "At least one garment image is required.", status_code=400)
 
-    try:
-        person = await _read_upload(person_image)
-        top = await _read_upload(garment_top)
-        bottom = await _read_upload(garment_bottom)
-        dress = await _read_upload(garment_dress)
-    except InputValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    person = await _read_upload(person_image)
+    top = await _read_upload(garment_top)
+    bottom = await _read_upload(garment_bottom)
+    dress = await _read_upload(garment_dress)
 
     job_service = get_job_service()
     job_id = job_service.new_job_id()
@@ -69,7 +84,7 @@ async def create_tryon(
     settings = get_settings()
     selected_run_mode = (run_mode or settings.api.run_mode).lower()
     if selected_run_mode not in {"sync", "async"}:
-        raise HTTPException(status_code=400, detail="run_mode must be 'sync' or 'async'.")
+        raise ApiError("INVALID_REQUEST", "run_mode must be 'sync' or 'async'.", status_code=400)
     if selected_run_mode == "async":
         queued = job_service.queue_tryon_job(request)
         background_tasks.add_task(job_service.run_queued_job, request)
@@ -81,7 +96,7 @@ async def create_tryon(
 def get_tryon(job_id: str) -> TryOnStatusResponse:
     job = get_job_service().get_job(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        raise ApiError("JOB_NOT_FOUND", f"Job not found: {job_id}", status_code=404)
     return job
 
 
@@ -89,7 +104,7 @@ def get_tryon(job_id: str) -> TryOnStatusResponse:
 def cancel_tryon(job_id: str) -> TryOnStatusResponse:
     job = get_job_service().cancel_job(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        raise ApiError("JOB_NOT_FOUND", f"Job not found: {job_id}", status_code=404)
     return job
 
 
@@ -107,11 +122,8 @@ async def refine_image(
     normalized_seed = normalize_seed(seed)
     set_seed(normalized_seed)
 
-    try:
-        base_image = await _read_upload(image)
-        mask_image = await _read_upload(mask)
-    except InputValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    base_image = await _read_upload(image)
+    mask_image = await _read_upload(mask)
 
     save_image(base_image, job_dir / "refine_input.png")
     if mask_image:

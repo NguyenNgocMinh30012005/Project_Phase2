@@ -6,7 +6,17 @@ from pydantic import BaseModel, Field
 
 
 TryOnCategory = Literal["upper_body", "lower_body", "dress", "full_outfit"]
-JobStatus = Literal["queued", "running", "completed", "failed"]
+JobStatus = Literal["queued", "running", "completed", "failed", "cancelled", "cancel_requested"]
+
+
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    details: dict = Field(default_factory=dict)
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorDetail
 
 
 class DebugUrls(BaseModel):
@@ -45,6 +55,9 @@ class TryOnStatusResponse(TryOnResponse):
     updated_at: str | None = None
     cancel_requested: bool = False
     engine_status: dict[str, str] = Field(default_factory=dict)
+    artifact_manifest: dict | None = None
+    error_code: str | None = None
+    retry_count: int = 0
 
 
 class HealthResponse(BaseModel):

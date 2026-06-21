@@ -17,6 +17,7 @@ from app.preprocessing.human_parser import HumanParser
 from app.preprocessing.image_loader import fit_to_canvas
 from app.preprocessing.refine_mask import build_refine_masks, select_refine_mask
 from app.schemas.tryon import DebugUrls, QualityScores, TryOnCategory, TryOnResponse
+from app.services.artifact_service import write_artifact_manifest
 from app.services.storage_service import StorageService
 from app.utils.errors import InputValidationError, ModelUnavailableError
 from app.utils.image_io import save_image
@@ -219,6 +220,11 @@ class TryOnPipeline:
             "core_metadata": core.metadata,
         }
         self.storage.save_json(request.job_id, "metadata.json", metadata)
+        write_artifact_manifest(
+            request.job_id,
+            job_dir,
+            self.settings.storage.public_outputs_prefix,
+        )
 
         return TryOnResponse(
             job_id=request.job_id,

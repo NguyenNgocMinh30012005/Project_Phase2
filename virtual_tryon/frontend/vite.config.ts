@@ -7,6 +7,8 @@ export default defineConfig({
     proxy: {
       "/tryon": "http://127.0.0.1:8000",
       "/health": "http://127.0.0.1:8000",
+      "/system": "http://127.0.0.1:8000",
+      "/metrics": "http://127.0.0.1:8000",
       "/artifacts": "http://127.0.0.1:8000"
     }
   }

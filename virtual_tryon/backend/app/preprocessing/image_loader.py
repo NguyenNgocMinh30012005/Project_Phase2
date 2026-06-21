@@ -13,8 +13,14 @@ ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
-def validate_mime(content_type: str | None, filename: str | None = None) -> None:
-    if content_type and content_type not in ALLOWED_IMAGE_MIME:
+def validate_mime(
+    content_type: str | None,
+    filename: str | None = None,
+    *,
+    allowed_mime_types: set[str] | None = None,
+) -> None:
+    allowed = allowed_mime_types or ALLOWED_IMAGE_MIME
+    if content_type and content_type not in allowed:
         raise InputValidationError(f"Unsupported image MIME type: {content_type}")
     if filename and Path(filename).suffix.lower() not in ALLOWED_SUFFIXES:
         raise InputValidationError(f"Unsupported image file extension: {filename}")
@@ -33,7 +39,10 @@ def normalize_image(image: Image.Image, max_side: int) -> Image.Image:
 
 def load_image_from_bytes(data: bytes, *, max_side: int) -> Image.Image:
     try:
+        verifier = Image.open(BytesIO(data))
+        verifier.verify()
         image = Image.open(BytesIO(data))
+        image.load()
         return normalize_image(image, max_side)
     except Exception as exc:
         raise InputValidationError(f"Invalid image file: {exc}") from exc

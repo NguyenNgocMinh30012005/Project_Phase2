@@ -1,17 +1,30 @@
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Check, Clipboard, Download, FileArchive } from "lucide-react";
 import { fetchJsonArtifact, resolveAssetUrl } from "../lib/api";
 import { useTryOnStore } from "../store/tryonStore";
+
+type QualityReport = {
+  final_choice?: string;
+  final_choice_reason?: string;
+  engine_status?: Record<string, string>;
+  outside_mask_delta?: number;
+  garment_region_delta?: number;
+  metrics?: {
+    outside_mask_delta?: number;
+    garment_region_delta?: number;
+  };
+};
 
 export function ResultViewer() {
   const result = useTryOnStore((state) => state.result);
   const showDebug = useTryOnStore((state) => state.showDebug);
-  const [qualityReport, setQualityReport] = useState<unknown>();
+  const [qualityReport, setQualityReport] = useState<QualityReport>();
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setQualityReport(undefined);
     if (!result?.debug?.quality_report_url) return;
-    fetchJsonArtifact<unknown>(result.debug.quality_report_url)
+    fetchJsonArtifact<QualityReport>(result.debug.quality_report_url)
       .then(setQualityReport)
       .catch(() => setQualityReport(undefined));
   }, [result?.debug?.quality_report_url]);
@@ -21,6 +34,15 @@ export function ResultViewer() {
   }
 
   const resultUrl = resolveAssetUrl(result.result_url);
+  const timeline = ["queued", "running", "generating", "refining", "completed"];
+  const activeIndex =
+    result.status === "queued"
+      ? 0
+      : result.status === "running" || result.status === "cancel_requested"
+        ? 2
+        : result.status === "completed"
+          ? 4
+          : -1;
   const debugItems: [string, string | null | undefined][] = [
     ["Mask", result.debug?.mask_url],
     ["Refine mask", result.debug?.refine_mask_url],
@@ -28,6 +50,16 @@ export function ResultViewer() {
     ["Core", result.debug?.core_output_url],
     ["Refined", result.debug?.refined_output_url]
   ];
+  const engineStatus = qualityReport?.engine_status ?? result.engine_status ?? {};
+  const outsideMaskDelta = qualityReport?.outside_mask_delta ?? qualityReport?.metrics?.outside_mask_delta;
+  const garmentRegionDelta = qualityReport?.garment_region_delta ?? qualityReport?.metrics?.garment_region_delta;
+  const jobId = result.job_id;
+
+  async function copyJobId() {
+    await navigator.clipboard.writeText(jobId);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <section className="result-surface">
@@ -36,15 +68,56 @@ export function ResultViewer() {
           <strong>{result.status}</strong>
           <span>{result.job_id}</span>
         </div>
-        {resultUrl && (
-          <a className="icon-button" href={resultUrl} download title="Download result">
-            <Download size={18} />
-          </a>
-        )}
+        <div className="result-actions">
+          <button className="icon-button neutral" type="button" onClick={copyJobId} title="Copy job ID">
+            {copied ? <Check size={18} /> : <Clipboard size={18} />}
+          </button>
+          <button className="icon-button neutral" type="button" disabled title="Artifact ZIP export is not implemented yet">
+            <FileArchive size={18} />
+          </button>
+          {resultUrl && (
+            <a className="icon-button" href={resultUrl} download title="Download result">
+              <Download size={18} />
+            </a>
+          )}
+        </div>
       </div>
 
+      <ol className="progress-timeline" aria-label="Job progress">
+        {timeline.map((step, index) => (
+          <li className={activeIndex >= index ? "done" : ""} key={step}>
+            <span />
+            {step}
+          </li>
+        ))}
+      </ol>
+
       {result.error && <div className="error-box">{result.error}</div>}
-      {resultUrl && <img className="result-image" src={resultUrl} alt="Try-on result" />}
+      {resultUrl && <img className="result-image" src={resultUrl} alt="Try-on result" data-testid="tryon-result" />}
+
+      {qualityReport && (
+        <section className="quality-summary" aria-label="Quality report">
+          <div><span>Final choice</span><strong>{qualityReport.final_choice ?? "unknown"}</strong></div>
+          <div><span>Core engine</span><strong>{engineStatus.idm_vton ?? engineStatus.catvton ?? "unknown"}</strong></div>
+          <div><span>Outside mask delta</span><strong>{outsideMaskDelta?.toFixed(4) ?? "n/a"}</strong></div>
+          <div><span>Garment region delta</span><strong>{garmentRegionDelta?.toFixed(4) ?? "n/a"}</strong></div>
+          {qualityReport.final_choice_reason && <p>{qualityReport.final_choice_reason}</p>}
+        </section>
+      )}
+
+      {result.artifact_manifest?.files?.length ? (
+        <section className="artifact-manifest">
+          <h2>Artifacts</h2>
+          <div>
+            {result.artifact_manifest.files.map((artifact) => (
+              <a href={resolveAssetUrl(artifact.url)} target="_blank" rel="noreferrer" key={artifact.name}>
+                <span>{artifact.name}</span>
+                <small>{Math.max(1, Math.round(artifact.size_bytes / 1024))} KB</small>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {showDebug && (
         <>

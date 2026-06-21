@@ -32,19 +32,19 @@ export function UploadGarment() {
           <span className="upload-icon"><Shirt size={18} /></span>
           <span className="upload-title">Top</span>
           <span className="upload-file">{state.topImage?.name ?? "No file selected"}</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("topImage", e.target.files?.[0])} />
+          <input type="file" aria-label="Top garment image" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("topImage", e.target.files?.[0])} />
         </label>
         <label className="upload-panel">
           <span className="upload-icon"><Upload size={18} /></span>
           <span className="upload-title">Bottom</span>
           <span className="upload-file">{state.bottomImage?.name ?? "No file selected"}</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("bottomImage", e.target.files?.[0])} />
+          <input type="file" aria-label="Bottom garment image" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("bottomImage", e.target.files?.[0])} />
         </label>
         <label className="upload-panel">
           <span className="upload-icon"><Upload size={18} /></span>
           <span className="upload-title">Dress</span>
           <span className="upload-file">{state.dressImage?.name ?? "No file selected"}</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("dressImage", e.target.files?.[0])} />
+          <input type="file" aria-label="Dress garment image" accept="image/png,image/jpeg,image/webp" onChange={(e) => setField("dressImage", e.target.files?.[0])} />
         </label>
       </div>
     </section>

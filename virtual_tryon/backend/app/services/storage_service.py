@@ -7,6 +7,7 @@ from typing import Any
 from PIL import Image
 
 from app.core.config import StorageConfig
+from app.services.artifact_service import build_artifact_url, is_allowed_artifact
 from app.utils.image_io import save_image
 
 
@@ -40,7 +41,9 @@ class StorageService:
             relative = path.relative_to(self.outputs_dir)
         except ValueError:
             return None
-        return f"{self.config.public_outputs_prefix}/{relative.as_posix()}"
+        if len(relative.parts) < 2 or not is_allowed_artifact(relative):
+            return None
+        return build_artifact_url(relative.parts[0], Path(*relative.parts[1:]), self.config.public_outputs_prefix)
 
     def file_path_from_public_url(self, url: str) -> Path:
         prefix = self.config.public_outputs_prefix.rstrip("/") + "/"

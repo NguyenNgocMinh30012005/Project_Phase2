@@ -32,7 +32,7 @@ def test_tryon_reject_no_garment(client, png_file):
         files={"person_image": png_file("person.png")},
     )
     assert response.status_code == 400
-    assert "garment" in response.json()["detail"].lower()
+    assert "garment" in response.json()["error"]["message"].lower()
 
 
 def test_tryon_accepts_upper_body_request(client, png_file):

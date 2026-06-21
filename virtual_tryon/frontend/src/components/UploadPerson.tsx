@@ -12,6 +12,7 @@ export function UploadPerson() {
       <span className="upload-file">{personImage?.name ?? "No file selected"}</span>
       <input
         type="file"
+        aria-label="Person image"
         accept="image/png,image/jpeg,image/webp"
         onChange={(event) => setField("personImage", event.target.files?.[0])}
       />

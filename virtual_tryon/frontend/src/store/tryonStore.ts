@@ -2,12 +2,25 @@ import { create } from "zustand";
 
 export type Category = "upper_body" | "lower_body" | "dress" | "full_outfit";
 
+export type ArtifactManifest = {
+  job_id: string;
+  files: {
+    name: string;
+    url: string;
+    type: "image" | "json" | "csv" | "html" | "text";
+    size_bytes: number;
+  }[];
+};
+
 export type TryOnResult = {
   job_id: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "cancel_requested";
   result_url?: string | null;
   error?: string | null;
+  error_code?: string | null;
   seed?: number | null;
+  engine_status?: Record<string, string>;
+  artifact_manifest?: ArtifactManifest | null;
   debug?: {
     mask_url?: string | null;
     mask_urls?: string[];
