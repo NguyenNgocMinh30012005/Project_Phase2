@@ -141,6 +141,14 @@ def _read_engine_status(variant_dir: Path) -> str:
         return "invalid_status_json"
 
 
+def _safe_output_note(value: str) -> str:
+    return (
+        value.replace("FAL_KEY", "fal credential")
+        .replace("Authorization", "redacted authorization")
+        .replace("Bearer ", "redacted bearer ")
+    )
+
+
 def _run_idm_original(
     sample: EvalSample,
     sample_output_dir: Path,
@@ -255,11 +263,11 @@ def _run_klein_variant(
     except TryOnError as exc:
         status = "unavailable" if "not available" in str(exc).lower() else "failed"
         error_code = "ENGINE_UNAVAILABLE" if status == "unavailable" else "ENGINE_EXECUTION_FAILED"
-        notes = str(exc)
+        notes = _safe_output_note(str(exc))
     except Exception as exc:
         status = "failed"
         error_code = "ENGINE_EXECUTION_FAILED"
-        notes = f"{type(exc).__name__}: {exc}"
+        notes = _safe_output_note(f"{type(exc).__name__}: {exc}")
         (variant_dir / "ablation_error.txt").write_text(notes, encoding="utf-8")
 
     return {

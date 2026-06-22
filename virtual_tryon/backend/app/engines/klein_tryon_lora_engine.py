@@ -58,10 +58,15 @@ def _sanitize_payload(value: Any) -> Any:
         return [_sanitize_payload(item) for item in value]
     if isinstance(value, tuple):
         return [_sanitize_payload(item) for item in value]
-    if isinstance(value, str) and value.startswith(("http://", "https://")):
-        parsed = urlsplit(value)
-        if parsed.query or parsed.fragment:
-            return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "[redacted-query]", ""))
+    if isinstance(value, str):
+        clean = value.replace("FAL_KEY", "fal credential")
+        clean = clean.replace("Authorization", "redacted authorization")
+        clean = clean.replace("Bearer ", "redacted bearer ")
+        if clean.startswith(("http://", "https://")):
+            parsed = urlsplit(clean)
+            if parsed.query or parsed.fragment:
+                return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "[redacted-query]", ""))
+        return clean
     return value
 
 

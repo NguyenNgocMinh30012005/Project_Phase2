@@ -72,6 +72,18 @@ data/outputs/klein_lora_ablation_real/
 
 If `FAL_KEY` is missing, the script still writes the summary, grid, index, prompt files, auto bottom references, and manual rating template. Klein rows are marked `unavailable`.
 
+## Secret Scan
+
+Before opening or sharing generated artifacts, scan the output folder:
+
+```bash
+python scripts/scan_outputs_for_secrets.py \
+  --path data/outputs/klein_lora_ablation_real \
+  --patterns FAL_KEY Authorization Bearer token= key=
+```
+
+The scanner reports only file names, line numbers, and matched pattern names. It does not print matched secret values. If a finding appears, delete or redact the generated output and fix the sanitizer before continuing review.
+
 ## Reading The Grid
 
 Open `comparison_grid.png` or `comparison_index.html`.
