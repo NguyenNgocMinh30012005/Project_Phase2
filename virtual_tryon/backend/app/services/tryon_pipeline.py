@@ -20,6 +20,9 @@ from app.preprocessing.garment_segmenter import GarmentSegmenter
 from app.preprocessing.human_parser import HumanParser
 from app.preprocessing.image_loader import fit_to_canvas
 from app.preprocessing.refine_mask import build_refine_masks, select_refine_mask
+from app.prompts.prompt_builder import build_prompt
+from app.prompts.prompt_types import EngineMode, PromptBuildResult, PromptVariant
+from app.prompts.testcase_prompt_library import get_testcase
 from app.schemas.tryon import DebugUrls, QualityScores, TryOnCategory, TryOnResponse
 from app.services.artifact_service import write_artifact_manifest
 from app.services.storage_service import StorageService
@@ -44,6 +47,9 @@ class PipelineRequest:
     repair_mode: bool
     seed: int | None = None
     engine_mode: str | None = None
+    testcase_id: str | None = None
+    prompt_variant: str = "default"
+    auto_prompt: bool = False
 
 
 class TryOnPipeline:
@@ -72,17 +78,112 @@ class TryOnPipeline:
         mode = request.engine_mode
         mode_settings = settings.model_copy(deep=True)
         if mode == "idm_vton":
-            mode_settings.pipeline.engine = "idm_vton"
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_vton"
+        elif mode == "idm_mask_expanded":
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_vton"
+            mode_settings.mask_experiments.upper_body_expand_hem.enabled = True
         elif mode == "idm_vton_flux":
-            mode_settings.pipeline.engine = "idm_vton"
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_vton"
+            mode_settings.flux_refiner.enabled = True
+            mode_settings.refinement.enabled = True
+        elif mode == "idm_mask_expanded_flux":
+            mode_settings.pipeline.engine = "mock" if settings.pipeline.engine == "mock" else "idm_vton"
+            mode_settings.mask_experiments.upper_body_expand_hem.enabled = True
             mode_settings.flux_refiner.enabled = True
             mode_settings.refinement.enabled = True
         elif mode == "klein_lora":
             mode_settings.pipeline.engine = "klein_tryon_lora"
             mode_settings.klein_tryon_lora.enabled = True
+        elif mode == "catvton":
+            mode_settings.pipeline.engine = "catvton"
         else:
             raise InputValidationError(f"Unsupported engine_mode '{mode}'.")
         return mode_settings
+
+    @staticmethod
+    def _prompt_engine_mode(request: PipelineRequest, settings: Settings) -> EngineMode:
+        mapping = {
+            "idm_vton": EngineMode.IDM,
+            "idm_mask_expanded": EngineMode.IDM_MASK_EXPANDED,
+            "idm_vton_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
+            "idm_mask_expanded_flux": EngineMode.IDM_MASK_EXPANDED_FLUX,
+            "klein_lora": EngineMode.KLEIN_LORA,
+            "catvton": EngineMode.CATVTON,
+        }
+        if request.engine_mode:
+            return mapping[request.engine_mode]
+        if settings.pipeline.engine == "klein_tryon_lora":
+            return EngineMode.KLEIN_LORA
+        if settings.pipeline.engine == "catvton":
+            return EngineMode.CATVTON
+        return EngineMode.IDM
+
+    def _resolve_prompts(
+        self,
+        request: PipelineRequest,
+        settings: Settings,
+    ) -> tuple[str | None, str | None, PromptBuildResult | None]:
+        engine_mode = self._prompt_engine_mode(request, settings)
+        if request.auto_prompt:
+            if not request.testcase_id:
+                raise InputValidationError("testcase_id is required when auto_prompt=true.")
+            try:
+                testcase = get_testcase(request.testcase_id)
+                variant = PromptVariant(request.prompt_variant)
+            except (KeyError, ValueError) as exc:
+                raise InputValidationError(str(exc)) from exc
+            prompt_request = testcase.build_request(engine_mode, variant)
+            if request.prompt:
+                prompt_request.extra_user_instruction = request.prompt
+            result = build_prompt(prompt_request)
+            return result.core_prompt or result.positive_prompt, result.refine_prompt, result
+
+        prompt = request.prompt
+        if engine_mode == EngineMode.KLEIN_LORA and prompt:
+            from app.engines.klein_prompt_builder import build_klein_tryon_prompt
+
+            prompt = build_klein_tryon_prompt(
+                None,
+                None,
+                None,
+                request.category,
+                extra_instruction=prompt,
+            )
+        if prompt is None and settings.pipeline.engine != "klein_tryon_lora":
+            prompt = settings.refinement.default_prompt
+        return prompt, None, None
+
+    def _save_prompt_artifacts(
+        self,
+        job_dir: Path,
+        core_prompt: str | None,
+        refine_prompt: str | None,
+        prompt_result: PromptBuildResult | None,
+    ) -> dict[str, Path | None]:
+        paths: dict[str, Path | None] = {
+            "core": None,
+            "refine": None,
+            "metadata": None,
+        }
+        if core_prompt:
+            paths["core"] = job_dir / "prompt_core.txt"
+            paths["core"].write_text(core_prompt, encoding="utf-8")
+            (job_dir / "prompt.txt").write_text(core_prompt, encoding="utf-8")
+        if refine_prompt:
+            paths["refine"] = job_dir / "prompt_refine.txt"
+            paths["refine"].write_text(refine_prompt, encoding="utf-8")
+        if prompt_result:
+            if prompt_result.negative_prompt:
+                (job_dir / "negative_prompt.txt").write_text(
+                    prompt_result.negative_prompt,
+                    encoding="utf-8",
+                )
+            paths["metadata"] = job_dir / "prompt_metadata.json"
+            paths["metadata"].write_text(
+                json.dumps(prompt_result.model_dump(mode="json"), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        return paths
 
     def validate_inputs(self, request: PipelineRequest) -> None:
         if request.person_image is None:
@@ -118,9 +219,8 @@ class TryOnPipeline:
         job_dir = self.storage.job_dir(request.job_id)
         width = settings.image.output_width
         height = settings.image.output_height
-        prompt = request.prompt if request.prompt else (
-            None if settings.pipeline.engine == "klein_tryon_lora" else settings.refinement.default_prompt
-        )
+        prompt, refine_prompt, prompt_result = self._resolve_prompts(request, settings)
+        prompt_paths = self._save_prompt_artifacts(job_dir, prompt, refine_prompt, prompt_result)
 
         person = fit_to_canvas(request.person_image, width, height)
         garment = fit_to_canvas(self._select_garment(request), width, height)
@@ -230,14 +330,17 @@ class TryOnPipeline:
             "klein_lora": "success" if core_engine_name == "klein_tryon_lora" else "skipped",
         }
         refiner_status = "skipped"
-        use_refiner = request.use_refiner or request.engine_mode == "idm_vton_flux"
+        use_refiner = request.use_refiner or request.engine_mode in {
+            "idm_vton_flux",
+            "idm_mask_expanded_flux",
+        }
         if use_refiner and settings.refinement.enabled and settings.flux_refiner.enabled:
             refiner = create_refiner(settings)
             try:
                 refined = refiner.refine(
                     core_image,
                     active_refine_mask,
-                    prompt,
+                    refine_prompt or prompt,
                     references={"person": person, "garment": garment_seg.normalized_crop},
                     seed=seed,
                 )
@@ -309,6 +412,10 @@ class TryOnPipeline:
             "category": request.category,
             "engine": getattr(engine, "name", "unknown"),
             "prompt": prompt,
+            "prompt_variant": request.prompt_variant,
+            "testcase_id": request.testcase_id,
+            "auto_prompt": request.auto_prompt,
+            "prompt_hash": prompt_result.metadata.get("prompt_hash") if prompt_result else None,
             "quality": quality.model_dump(),
             "quality_report": quality_report,
             "refiner_status": refiner_status,
@@ -343,6 +450,9 @@ class TryOnPipeline:
                 refined_output_url=self.storage.public_url(refined_path),
                 quality_report_url=self.storage.public_url(quality_report_path),
                 refine_mask_url=self.storage.public_url(job_dir / "safe_refine_mask_overlay.png"),
+                prompt_core_url=self.storage.public_url(prompt_paths["core"]),
+                prompt_refine_url=self.storage.public_url(prompt_paths["refine"]),
+                prompt_metadata_url=self.storage.public_url(prompt_paths["metadata"]),
             ),
             quality=quality,
             seed=seed,

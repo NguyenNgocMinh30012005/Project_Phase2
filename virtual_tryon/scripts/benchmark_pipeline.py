@@ -20,6 +20,7 @@ sys.path.insert(0, str(SCRIPTS_ROOT))
 from app.core.config import load_settings  # noqa: E402
 from app.engines.factory import create_tryon_engine  # noqa: E402
 from app.preprocessing.image_loader import load_image_from_path  # noqa: E402
+from app.prompts.prompt_types import PromptVariant  # noqa: E402
 from app.services.storage_service import StorageService  # noqa: E402
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline  # noqa: E402
 from app.utils.errors import ModelUnavailableError, TryOnError  # noqa: E402
@@ -46,6 +47,8 @@ CSV_COLUMNS = [
     "result_path",
     "output_path",
     "prompt_path",
+    "prompt_variant",
+    "prompt_hash",
     "engine_status",
     "error_code",
     "background_preservation_score",
@@ -185,6 +188,52 @@ def _mode_flags(mode: str) -> tuple[bool, bool]:
     return False, False
 
 
+def _api_engine_mode_for_benchmark(mode: str) -> str | None:
+    mapping = {
+        "idm": "idm_vton",
+        "idm_flux": "idm_vton_flux",
+        "idm_mask_expanded": "idm_mask_expanded",
+        "idm_mask_expanded_flux": "idm_mask_expanded_flux",
+        "catvton": "catvton",
+        "klein_lora": "klein_lora",
+        "repair": "idm_vton_flux",
+    }
+    return mapping.get(mode)
+
+
+def _sample_testcase_id(sample: EvalSample, requested: str | None) -> str | None:
+    if requested:
+        return requested
+    metadata_id = sample.metadata.get("testcase_id") if isinstance(sample.metadata, dict) else None
+    if isinstance(metadata_id, str) and metadata_id:
+        return metadata_id
+    sample_id = sample.sample_id.lower()
+    return sample_id if sample_id.startswith("tc") or sample_id.startswith("testcase") else None
+
+
+def _prompt_artifact_paths(mode_dir: Path, benchmark_dir: Path) -> dict[str, str | None]:
+    prompt_path = mode_dir / "prompt_core.txt"
+    legacy_prompt_path = mode_dir / "prompt.txt"
+    metadata_path = mode_dir / "prompt_metadata.json"
+    prompt_hash = None
+    if metadata_path.exists():
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            prompt_hash = (payload.get("metadata") or {}).get("prompt_hash")
+        except json.JSONDecodeError:
+            prompt_hash = None
+    return {
+        "prompt_path": (
+            _display_path(prompt_path, benchmark_dir)
+            if prompt_path.exists()
+            else _display_path(legacy_prompt_path, benchmark_dir)
+            if legacy_prompt_path.exists()
+            else None
+        ),
+        "prompt_hash": prompt_hash,
+    }
+
+
 def _copy_inputs(sample: EvalSample, sample_dir: Path, benchmark_dir: Path, settings) -> dict[str, str | None]:
     person = load_image_from_path(sample.person_path, max_side=settings.image.max_side)
     paths: dict[str, str | None] = {}
@@ -211,6 +260,10 @@ def _request_for_sample(
     repair_mode: bool,
     seed: int,
     settings,
+    engine_mode: str | None,
+    auto_prompt: bool,
+    testcase_id: str | None,
+    prompt_variant: str,
 ) -> PipelineRequest:
     person = load_image_from_path(sample.person_path, max_side=settings.image.max_side)
     garment_top = load_image_from_path(sample.garment_top, max_side=settings.image.max_side) if sample.garment_top else None
@@ -227,6 +280,10 @@ def _request_for_sample(
         use_refiner=use_refiner,
         repair_mode=repair_mode,
         seed=seed,
+        engine_mode=engine_mode,
+        testcase_id=testcase_id,
+        prompt_variant=prompt_variant,
+        auto_prompt=auto_prompt,
     )
 
 
@@ -249,6 +306,8 @@ def _skip_row(sample: EvalSample, mode: str, sample_dir: Path, benchmark_dir: Pa
         "result_path": None,
         "output_path": None,
         "prompt_path": None,
+        "prompt_variant": None,
+        "prompt_hash": None,
         "engine_status": reason,
         "error_code": "ENGINE_UNAVAILABLE",
         "mode_dir": _display_path(mode_dir, benchmark_dir),
@@ -272,6 +331,9 @@ def _run_mode(
     *,
     mock: bool,
     prompt: str | None,
+    prompt_source: str,
+    prompt_variant: str,
+    testcase_id: str | None,
     seed: int,
 ) -> tuple[dict, dict | None]:
     started = time.perf_counter()
@@ -279,10 +341,15 @@ def _run_mode(
     storage = StorageService(mode_settings.storage)
     mode_dir = sample_dir / mode
     job_id = f"{benchmark_dir.name}/{sample.sample_id}/{mode}"
+    resolved_testcase_id = _sample_testcase_id(sample, testcase_id)
+    auto_prompt = prompt_source == "auto" and resolved_testcase_id is not None
+    api_engine_mode = _api_engine_mode_for_benchmark(mode)
     engine = create_tryon_engine(mode_settings)
     if not engine.is_available():
         status = engine.status() if hasattr(engine, "status") else f"{getattr(engine, 'name', mode)} unavailable"
-        return _skip_row(sample, mode, sample_dir, benchmark_dir, input_paths, status, started), None
+        row = _skip_row(sample, mode, sample_dir, benchmark_dir, input_paths, status, started)
+        row["prompt_variant"] = prompt_variant if auto_prompt else "manual"
+        return row, None
 
     use_refiner, repair_mode = _mode_flags(mode)
     try:
@@ -294,12 +361,16 @@ def _run_mode(
             repair_mode=repair_mode,
             seed=seed,
             settings=mode_settings,
+            engine_mode=api_engine_mode,
+            auto_prompt=auto_prompt,
+            testcase_id=resolved_testcase_id,
+            prompt_variant=prompt_variant,
         )
         response = TryOnPipeline(mode_settings, storage).run(request)
         result_path = storage.file_path_from_public_url(response.result_url) if response.result_url else None
         quality_path = mode_dir / "quality_report.json"
         metadata_path = mode_dir / "metadata.json"
-        prompt_path = mode_dir / "prompt.txt"
+        prompt_artifacts = _prompt_artifact_paths(mode_dir, benchmark_dir)
         report = json.loads(quality_path.read_text(encoding="utf-8")) if quality_path.exists() else None
         engine_status = ""
         if report and isinstance(report.get("engine_status"), dict):
@@ -311,7 +382,8 @@ def _run_mode(
             "runtime_seconds": round(time.perf_counter() - started, 3),
             "result_path": _display_path(result_path, benchmark_dir) if result_path else None,
             "output_path": _display_path(result_path, benchmark_dir) if result_path else None,
-            "prompt_path": _display_path(prompt_path, benchmark_dir) if prompt_path.exists() else None,
+            **prompt_artifacts,
+            "prompt_variant": prompt_variant if auto_prompt else "manual",
             "engine_status": engine_status or response.status,
             "error_code": None,
             "mode_dir": _display_path(mode_dir, benchmark_dir),
@@ -343,6 +415,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--garment", default=None, help="Legacy single garment image fallback.")
     parser.add_argument("--category", default="upper_body", choices=["upper_body", "lower_body", "dress", "full_outfit"])
     parser.add_argument("--prompt", default="replace the shirt with the reference garment, preserve face, pose, and body shape")
+    parser.add_argument("--prompt-source", default="manual", choices=["manual", "auto"])
+    parser.add_argument(
+        "--prompt-variant",
+        default="default",
+        choices=[variant.value for variant in PromptVariant],
+    )
+    parser.add_argument("--save-prompts", action="store_true", help="Keep prompt artifacts in each mode folder.")
+    parser.add_argument("--testcase-id", default=None)
     parser.add_argument("--mock", action="store_true")
     return parser.parse_args()
 
@@ -396,7 +476,10 @@ def main() -> int:
                 input_paths,
                 settings,
                 mock=args.mock,
-                prompt=args.prompt,
+                prompt=args.prompt if args.prompt_source == "manual" else None,
+                prompt_source=args.prompt_source,
+                prompt_variant=args.prompt_variant,
+                testcase_id=args.testcase_id,
                 seed=0,
             )
             rows.append(row)

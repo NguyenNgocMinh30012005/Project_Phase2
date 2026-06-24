@@ -43,6 +43,10 @@ cd virtual_tryon
 python scripts/benchmark_pipeline.py \
   --eval-set data/eval_set \
   --modes idm,idm_flux,idm_mask_expanded,idm_mask_expanded_flux,klein_lora \
+  --prompt-source auto \
+  --prompt-variant strong_remove_old_garment \
+  --testcase-id tc10 \
+  --save-prompts \
   --limit 1 \
   --output data/outputs/benchmark_phase6_test
 ```
@@ -58,6 +62,15 @@ Modes:
 - `klein_lora`: fal.ai FLUX.2 Klein 9B Try-On LoRA experimental baseline.
 
 If a baseline engine is unavailable, its row is marked `unavailable` and the benchmark continues.
+
+Prompt options:
+
+- `--prompt-source manual|auto`: manual uses `--prompt`; auto builds prompts from `backend/app/prompts/testcase_prompt_library.py`.
+- `--prompt-variant default|strong_remove_old_garment|identity_strict`: selects a deterministic prompt variant.
+- `--testcase-id tc1..tc15`: testcase metadata used by auto prompt mode.
+- `--save-prompts`: records prompt artifacts in each mode folder.
+
+When auto prompts are enabled, mode folders include `prompt_core.txt`, optional `prompt_refine.txt`, `negative_prompt.txt`, and `prompt_metadata.json`. `summary.csv` includes `prompt_variant`, `prompt_hash`, and `prompt_path`.
 
 Output:
 
@@ -109,6 +122,10 @@ python scripts/run_mask_ablation.py \
   --sample data/eval_set/sample_001 \
   --seed 0 \
   --variants idm_original,idm_mask_expanded,idm_mask_expanded_flux_local \
+  --prompt-source auto \
+  --prompt-variant strong_remove_old_garment \
+  --testcase-id tc10 \
+  --save-prompts \
   --output data/outputs/ablation_upper_body_mask_test
 ```
 
@@ -149,6 +166,9 @@ Run the dedicated LoRA comparison:
 python scripts/run_klein_lora_ablation.py \
   --sample data/eval_set/sample_001 \
   --seed 42 \
+  --prompt-source auto \
+  --testcase-id tc10 \
+  --save-prompts \
   --bottom-strategy crop_from_person \
   --output data/outputs/klein_lora_ablation_test
 ```

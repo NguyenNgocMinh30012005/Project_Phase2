@@ -44,6 +44,10 @@ function App() {
       form.append("use_refiner", String(state.useRefiner));
       form.append("repair_mode", String(state.repairMode));
       form.append("run_mode", state.runMode);
+      form.append("auto_prompt", String(state.autoPrompt));
+      form.append("prompt_variant", state.promptVariant);
+      if (state.testcaseId.trim()) form.append("testcase_id", state.testcaseId.trim());
+      if (state.engineMode) form.append("engine_mode", state.engineMode);
       let result = await submitTryOn(form);
       setField("result", result);
       setField("jobId", result.job_id);
@@ -121,6 +125,38 @@ function App() {
             </label>
           </div>
         </div>
+
+        <section className="advanced-prompts" aria-label="Advanced prompt controls">
+          <label><input type="checkbox" checked={state.autoPrompt} onChange={(e) => setField("autoPrompt", e.target.checked)} /> Use auto prompt</label>
+          <label>
+            <span>Testcase</span>
+            <input
+              value={state.testcaseId}
+              onChange={(e) => setField("testcaseId", e.target.value)}
+              placeholder="tc10"
+            />
+          </label>
+          <label>
+            <span>Variant</span>
+            <select value={state.promptVariant} onChange={(e) => setField("promptVariant", e.target.value as typeof state.promptVariant)}>
+              <option value="default">Default</option>
+              <option value="strong_remove_old_garment">Strong remove old garment</option>
+              <option value="identity_strict">Identity strict</option>
+            </select>
+          </label>
+          <label>
+            <span>Engine</span>
+            <select value={state.engineMode} onChange={(e) => setField("engineMode", e.target.value as typeof state.engineMode)}>
+              <option value="">IDM-VTON default</option>
+              <option value="idm_vton">IDM-VTON</option>
+              <option value="idm_mask_expanded">IDM-VTON expanded mask</option>
+              <option value="idm_vton_flux">IDM-VTON + FLUX</option>
+              <option value="idm_mask_expanded_flux">Expanded mask + FLUX</option>
+              <option value="klein_lora">Klein LoRA experimental</option>
+              <option value="catvton">CatVTON baseline</option>
+            </select>
+          </label>
+        </section>
 
         {state.error && <div className="error-box">{state.error}</div>}
 

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 export type Category = "upper_body" | "lower_body" | "dress" | "full_outfit";
+export type EngineMode = "" | "idm_vton" | "idm_vton_flux" | "idm_mask_expanded" | "idm_mask_expanded_flux" | "klein_lora" | "catvton";
+export type PromptVariant = "default" | "strong_remove_old_garment" | "identity_strict";
 
 export type ArtifactManifest = {
   job_id: string;
@@ -29,6 +31,9 @@ export type TryOnResult = {
     refined_output_url?: string | null;
     quality_report_url?: string | null;
     refine_mask_url?: string | null;
+    prompt_core_url?: string | null;
+    prompt_refine_url?: string | null;
+    prompt_metadata_url?: string | null;
   };
   quality?: {
     needs_refine: boolean;
@@ -46,6 +51,10 @@ type TryOnState = {
   dressImage?: File;
   category: Category;
   prompt: string;
+  autoPrompt: boolean;
+  testcaseId: string;
+  promptVariant: PromptVariant;
+  engineMode: EngineMode;
   useRefiner: boolean;
   repairMode: boolean;
   runMode: "sync" | "async";
@@ -61,6 +70,10 @@ type TryOnState = {
 export const useTryOnStore = create<TryOnState>((set) => ({
   category: "upper_body",
   prompt: "",
+  autoPrompt: false,
+  testcaseId: "",
+  promptVariant: "default",
+  engineMode: "",
   useRefiner: true,
   repairMode: true,
   runMode: "sync",

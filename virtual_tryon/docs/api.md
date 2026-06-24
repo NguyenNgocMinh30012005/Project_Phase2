@@ -31,7 +31,10 @@ Multipart form fields:
 - `use_refiner`: boolean, default `true`.
 - `repair_mode`: boolean, default `true`.
 - `run_mode`: optional `sync` or `async`; defaults to `configs/pipeline.yaml`.
-- `engine_mode`: optional `idm_vton`, `idm_vton_flux`, or `klein_lora`; default is the configured core engine.
+- `engine_mode`: optional `idm_vton`, `idm_mask_expanded`, `idm_vton_flux`, `idm_mask_expanded_flux`, `klein_lora`, or `catvton`; default is the configured core engine.
+- `auto_prompt`: optional boolean, default `false`.
+- `testcase_id`: optional `tc1` through `tc15`; required when `auto_prompt=true`.
+- `prompt_variant`: optional `default`, `strong_remove_old_garment`, or `identity_strict`.
 - `seed`: optional integer.
 
 Response:
@@ -48,7 +51,10 @@ Response:
     "core_output_url": "/artifacts/abc/core_output.png",
     "refined_output_url": "/artifacts/abc/refined_output.png",
     "quality_report_url": "/artifacts/abc/quality_report.json",
-    "refine_mask_url": "/artifacts/abc/safe_refine_mask_overlay.png"
+    "refine_mask_url": "/artifacts/abc/safe_refine_mask_overlay.png",
+    "prompt_core_url": "/artifacts/abc/prompt_core.txt",
+    "prompt_refine_url": "/artifacts/abc/prompt_refine.txt",
+    "prompt_metadata_url": "/artifacts/abc/prompt_metadata.json"
   },
   "seed": 123
 }
@@ -68,6 +74,14 @@ When `run_mode=async`, `POST /tryon` returns quickly:
 Poll `GET /tryon/{job_id}` until `completed` or `failed`.
 
 If the core model is missing, the job returns `status: failed` and a clear `error` string.
+
+Prompt behavior:
+
+- Manual prompt with `auto_prompt=false` preserves the existing API behavior.
+- `auto_prompt=true` builds an engine-specific prompt from testcase metadata.
+- `engine_mode=klein_lora` normalizes the prompt so it starts with `TRYON`.
+- `engine_mode=idm_vton_flux` or `idm_mask_expanded_flux` can save both core and refine prompts.
+- Prompt artifacts are served through the same `/artifacts` route as images and reports.
 
 `engine_mode=klein_lora` is experimental. It opts into the Klein Try-On LoRA adapter for that request only, requires a top garment, and uses the configured bottom-reference strategy when no bottom garment is uploaded. If `FAL_KEY`, dependencies, or model access are missing, the job returns `status: failed` with `error_code: ENGINE_UNAVAILABLE` and no raw stack trace.
 

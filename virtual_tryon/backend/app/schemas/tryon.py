@@ -27,6 +27,9 @@ class DebugUrls(BaseModel):
     refined_output_url: str | None = None
     quality_report_url: str | None = None
     refine_mask_url: str | None = None
+    prompt_core_url: str | None = None
+    prompt_refine_url: str | None = None
+    prompt_metadata_url: str | None = None
 
 
 class QualityScores(BaseModel):

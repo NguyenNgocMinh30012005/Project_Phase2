@@ -70,6 +70,8 @@ If `use_refiner=true` but FLUX is unavailable or fails, the job remains `complet
 
 Subjective observations belong in the benchmark's `manual_ratings.csv`, the mask ablation's `manual_ratings_mask_ablation.csv`, or the Klein LoRA ablation's `manual_ratings_klein_lora.csv`. Human reviewers should score identity, garment fidelity, old-garment removal, realism, pose preservation, over-editing, and the winning variant there.
 
+Prompt variant comparisons use `manual_ratings_prompt_ablation.csv` from `scripts/run_prompt_ablation.py`. Prompt success/failure observations, such as old garment remnants, logo fidelity, or over-editing caused by a strong prompt, must be recorded in that manual ratings file rather than `quality_report.json`.
+
 Klein LoRA manual ratings use this schema:
 
 ```text
@@ -111,6 +113,8 @@ data/outputs/benchmark_{timestamp}/
 ```
 
 Rows include `sample_id`, `mode`, `runtime_seconds`, `output_path`, `background_preservation_score`, `face_preservation_score`, `garment_change_score`, `over_edit_score`, `final_choice`, and `notes`. The benchmark keeps running when the refiner fails, so it is safe to use while FLUX weights or compatible diffusers builds are still being prepared.
+
+Prompt-aware benchmark rows also include `prompt_variant`, `prompt_hash`, and `prompt_path` when `--prompt-source auto` or saved prompt artifacts are enabled.
 
 For golden-set benchmarking, prefer:
 

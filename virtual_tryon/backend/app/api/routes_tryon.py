@@ -59,13 +59,41 @@ async def create_tryon(
     run_mode: Annotated[str | None, Form()] = None,
     engine_mode: Annotated[str | None, Form()] = None,
     seed: Annotated[int | None, Form()] = None,
+    testcase_id: Annotated[str | None, Form()] = None,
+    prompt_variant: Annotated[str, Form()] = "default",
+    auto_prompt: Annotated[bool, Form()] = False,
 ) -> TryOnStatusResponse:
     if not any([garment_top, garment_bottom, garment_dress]):
         raise ApiError("INVALID_REQUEST", "At least one garment image is required.", status_code=400)
-    if engine_mode and engine_mode not in {"idm_vton", "idm_vton_flux", "klein_lora"}:
+    valid_engine_modes = {
+        "idm_vton",
+        "idm_mask_expanded",
+        "idm_vton_flux",
+        "idm_mask_expanded_flux",
+        "klein_lora",
+        "catvton",
+    }
+    if engine_mode and engine_mode not in valid_engine_modes:
         raise ApiError(
             "INVALID_REQUEST",
-            "engine_mode must be one of: idm_vton, idm_vton_flux, klein_lora.",
+            "engine_mode must be one of: " + ", ".join(sorted(valid_engine_modes)) + ".",
+            status_code=400,
+        )
+    valid_prompt_variants = {
+        "default",
+        "strong_remove_old_garment",
+        "identity_strict",
+        "accessory_stress",
+        "flux_local_refine",
+        "catvton_minimal",
+        "adetailer_repair",
+    }
+    if prompt_variant not in valid_prompt_variants:
+        raise ApiError("INVALID_REQUEST", "Unsupported prompt_variant.", status_code=400)
+    if auto_prompt and not testcase_id:
+        raise ApiError(
+            "INVALID_REQUEST",
+            "testcase_id is required when auto_prompt=true.",
             status_code=400,
         )
 
@@ -88,6 +116,9 @@ async def create_tryon(
         repair_mode=repair_mode,
         seed=seed,
         engine_mode=engine_mode,
+        testcase_id=testcase_id,
+        prompt_variant=prompt_variant,
+        auto_prompt=auto_prompt,
     )
     settings = get_settings()
     selected_run_mode = (run_mode or settings.api.run_mode).lower()

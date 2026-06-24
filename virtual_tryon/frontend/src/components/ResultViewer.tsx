@@ -146,6 +146,17 @@ export function ResultViewer() {
               quality_report.json
             </a>
           )}
+          {[
+            ["prompt_core.txt", result.debug?.prompt_core_url],
+            ["prompt_refine.txt", result.debug?.prompt_refine_url],
+            ["prompt_metadata.json", result.debug?.prompt_metadata_url]
+          ].map(([label, url]) =>
+            url ? (
+              <a className="artifact-link" href={resolveAssetUrl(url)} target="_blank" rel="noreferrer" key={label}>
+                {label}
+              </a>
+            ) : null
+          )}
           {qualityReport ? <pre className="quality-json">{JSON.stringify(qualityReport, null, 2)}</pre> : null}
         </>
       )}

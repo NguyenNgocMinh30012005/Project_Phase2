@@ -24,6 +24,9 @@ from app.core.config import Settings, load_settings  # noqa: E402
 from app.engines.factory import create_refiner  # noqa: E402
 from app.evaluation.quality_checks import build_quality_report  # noqa: E402
 from app.preprocessing.image_loader import load_image_from_path  # noqa: E402
+from app.prompts.prompt_builder import build_prompt  # noqa: E402
+from app.prompts.prompt_types import EngineMode, PromptVariant  # noqa: E402
+from app.prompts.testcase_prompt_library import get_testcase  # noqa: E402
 from app.services.storage_service import StorageService  # noqa: E402
 from app.services.tryon_pipeline import PipelineRequest, TryOnPipeline  # noqa: E402
 from app.utils.errors import ModelUnavailableError  # noqa: E402
@@ -54,6 +57,9 @@ SUMMARY_COLUMNS = [
     "runtime_seconds",
     "status",
     "final_choice",
+    "prompt_variant",
+    "prompt_hash",
+    "prompt_path",
     "notes",
 ]
 MANUAL_RATING_COLUMNS = [
@@ -68,6 +74,49 @@ MANUAL_RATING_COLUMNS = [
     "winner",
     "notes",
 ]
+
+
+def _prompt_artifact_paths(variant_dir: Path, output_dir: Path) -> dict[str, str | None]:
+    prompt_path = variant_dir / "prompt_core.txt"
+    legacy_prompt_path = variant_dir / "prompt.txt"
+    metadata_path = variant_dir / "prompt_metadata.json"
+    prompt_hash = None
+    if metadata_path.exists():
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            prompt_hash = (payload.get("metadata") or {}).get("prompt_hash")
+        except json.JSONDecodeError:
+            prompt_hash = None
+    return {
+        "prompt_path": (
+            prompt_path.relative_to(output_dir).as_posix()
+            if prompt_path.exists()
+            else legacy_prompt_path.relative_to(output_dir).as_posix()
+            if legacy_prompt_path.exists()
+            else None
+        ),
+        "prompt_hash": prompt_hash,
+    }
+
+
+def _engine_mode_for_variant(variant: str) -> str:
+    if variant == "idm_mask_expanded_flux_local":
+        return "idm_mask_expanded_flux"
+    if variant == "idm_mask_expanded":
+        return "idm_mask_expanded"
+    return "idm_vton"
+
+
+def _build_flux_prompt(testcase_id: str | None, prompt_variant: str):
+    if not testcase_id:
+        return None
+    testcase = get_testcase(testcase_id)
+    return build_prompt(
+        testcase.build_request(
+            EngineMode.IDM_MASK_EXPANDED_FLUX,
+            PromptVariant(prompt_variant),
+        )
+    )
 
 
 def parse_variants(value: str) -> list[str]:
@@ -98,6 +147,10 @@ def _request_for_sample(
     job_id: str,
     seed: int,
     settings: Settings,
+    prompt: str | None,
+    prompt_source: str,
+    prompt_variant: str,
+    testcase_id: str | None,
 ) -> PipelineRequest:
     return PipelineRequest(
         job_id=job_id,
@@ -118,10 +171,14 @@ def _request_for_sample(
             else None
         ),
         category=sample.category,
-        prompt="replace the shirt with the reference garment, preserve face, pose, and body shape",
+        prompt=prompt,
         use_refiner=False,
         repair_mode=False,
         seed=seed,
+        engine_mode=_engine_mode_for_variant(job_id),
+        testcase_id=testcase_id,
+        prompt_variant=prompt_variant,
+        auto_prompt=prompt_source == "auto" and testcase_id is not None,
     )
 
 
@@ -145,6 +202,9 @@ def _run_core_variant(
     *,
     seed: int,
     mock: bool,
+    prompt_source: str = "manual",
+    prompt_variant: str = "default",
+    testcase_id: str | None = None,
 ) -> tuple[dict[str, Any], Path]:
     started = time.perf_counter()
     settings = _variant_settings(base_settings, variant, output_dir, mock=mock)
@@ -155,6 +215,14 @@ def _run_core_variant(
         job_id=variant,
         seed=seed,
         settings=settings,
+        prompt=(
+            None
+            if prompt_source == "auto" and testcase_id
+            else "replace the shirt with the reference garment, preserve face, pose, and body shape"
+        ),
+        prompt_source=prompt_source,
+        prompt_variant=prompt_variant,
+        testcase_id=testcase_id,
     )
     try:
         response = TryOnPipeline(settings, storage).run(request)
@@ -172,6 +240,8 @@ def _run_core_variant(
             "runtime_seconds": round(time.perf_counter() - started, 3),
             "status": response.status,
             "final_choice": report.get("final_choice", "core"),
+            "prompt_variant": prompt_variant if prompt_source == "auto" and testcase_id else "manual",
+            **_prompt_artifact_paths(variant_dir, output_dir),
             "notes": _quality_notes(report),
             "output_path": f"{variant}/result.png",
             "metadata_path": f"{variant}/metadata.json",
@@ -194,6 +264,9 @@ def _run_core_variant(
                 "runtime_seconds": round(time.perf_counter() - started, 3),
                 "status": "failed",
                 "final_choice": None,
+                "prompt_variant": prompt_variant if prompt_source == "auto" and testcase_id else "manual",
+                "prompt_hash": None,
+                "prompt_path": None,
                 "notes": str(exc),
                 "output_path": None,
                 "metadata_path": None,
@@ -211,6 +284,9 @@ def run_flux_local_variant(
     *,
     seed: int,
     refiner_factory=create_refiner,
+    prompt_source: str = "manual",
+    prompt_variant: str = "default",
+    testcase_id: str | None = None,
 ) -> dict[str, Any]:
     variant = "idm_mask_expanded_flux_local"
     variant_dir = output_dir / variant
@@ -230,7 +306,25 @@ def run_flux_local_variant(
         "mask_source": selected_mask_path.name,
         "seed": seed,
     }
-    (variant_dir / "refiner_prompt.txt").write_text(REFINER_PROMPT, encoding="utf-8")
+    prompt_result = (
+        _build_flux_prompt(testcase_id, prompt_variant)
+        if prompt_source == "auto" and testcase_id
+        else None
+    )
+    refiner_prompt = prompt_result.refine_prompt if prompt_result and prompt_result.refine_prompt else REFINER_PROMPT
+    (variant_dir / "refiner_prompt.txt").write_text(refiner_prompt, encoding="utf-8")
+    if prompt_result:
+        (variant_dir / "prompt_core.txt").write_text(
+            prompt_result.core_prompt or prompt_result.positive_prompt,
+            encoding="utf-8",
+        )
+        (variant_dir / "prompt_refine.txt").write_text(refiner_prompt, encoding="utf-8")
+        if prompt_result.negative_prompt:
+            (variant_dir / "negative_prompt.txt").write_text(prompt_result.negative_prompt, encoding="utf-8")
+        (variant_dir / "prompt_metadata.json").write_text(
+            json.dumps(prompt_result.model_dump(mode="json"), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     if not core_path.exists() or not selected_mask_path.exists():
         status_payload.update(
@@ -249,6 +343,8 @@ def run_flux_local_variant(
             "runtime_seconds": round(time.perf_counter() - started, 3),
             "status": "skipped",
             "final_choice": "core",
+            "prompt_variant": prompt_variant if prompt_result else "manual",
+            **_prompt_artifact_paths(variant_dir, output_dir),
             "notes": status_payload["reason"],
             "output_path": None,
             "metadata_path": None,
@@ -290,6 +386,8 @@ def run_flux_local_variant(
             "runtime_seconds": round(time.perf_counter() - started, 3),
             "status": "skipped",
             "final_choice": "core",
+            "prompt_variant": prompt_variant if prompt_result else "manual",
+            **_prompt_artifact_paths(variant_dir, output_dir),
             "notes": reason,
             "output_path": None,
             "metadata_path": None,
@@ -304,7 +402,7 @@ def run_flux_local_variant(
         refined = refiner.refine(
             core_image,
             mask_image,
-            REFINER_PROMPT,
+            refiner_prompt,
             references={"person": person_image, "garment": garment_image},
             seed=seed,
         )
@@ -363,6 +461,8 @@ def run_flux_local_variant(
         "runtime_seconds": round(time.perf_counter() - started, 3),
         "status": status,
         "final_choice": final_choice,
+        "prompt_variant": prompt_variant if prompt_result else "manual",
+        **_prompt_artifact_paths(variant_dir, output_dir),
         "notes": notes,
         "output_path": output_path,
         "metadata_path": None,
@@ -521,6 +621,10 @@ def run_ablation(
     output_dir: Path,
     mock: bool = False,
     refiner_factory=create_refiner,
+    prompt_source: str = "manual",
+    prompt_variant: str = "default",
+    save_prompts: bool = False,
+    testcase_id: str | None = None,
 ) -> dict[str, Any]:
     sample, issues = validate_sample(sample_dir)
     if sample is None:
@@ -552,6 +656,9 @@ def run_ablation(
             base_settings,
             seed=seed,
             mock=mock,
+            prompt_source=prompt_source,
+            prompt_variant=prompt_variant,
+            testcase_id=testcase_id,
         )
         core_rows[variant] = row
         if variant in variants:
@@ -579,6 +686,9 @@ def run_ablation(
                 expanded_dir,
                 seed=seed,
                 refiner_factory=flux_factory,
+                prompt_source=prompt_source,
+                prompt_variant=prompt_variant,
+                testcase_id=testcase_id,
             )
         )
 
@@ -588,6 +698,9 @@ def run_ablation(
         "variants": variants,
         "rows": rows,
         "production_default_changed": False,
+        "prompt_source": prompt_source,
+        "prompt_variant": prompt_variant,
+        "save_prompts": save_prompts,
     }
     summary_json = output_dir / "summary.json"
     summary_csv = output_dir / "summary.csv"
@@ -609,6 +722,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--variants", default=",".join(DEFAULT_VARIANTS))
     parser.add_argument("--output", default=None)
     parser.add_argument("--mock", action="store_true")
+    parser.add_argument("--prompt-source", default="manual", choices=["manual", "auto"])
+    parser.add_argument(
+        "--prompt-variant",
+        default="default",
+        choices=[variant.value for variant in PromptVariant],
+    )
+    parser.add_argument("--save-prompts", action="store_true")
+    parser.add_argument("--testcase-id", default=None)
     return parser.parse_args()
 
 
@@ -629,6 +750,10 @@ def main() -> int:
         variants=variants,
         output_dir=output_dir,
         mock=args.mock,
+        prompt_source=args.prompt_source,
+        prompt_variant=args.prompt_variant,
+        save_prompts=args.save_prompts,
+        testcase_id=args.testcase_id,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     print(f"comparison_grid={output_dir / 'comparison_grid.png'}")
