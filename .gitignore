@@ -8,6 +8,8 @@ venv/
 node_modules/
 dist/
 build/
+
+# Frontend build/test artifacts
 virtual_tryon/frontend/node_modules/
 virtual_tryon/frontend/dist/
 .vite/
@@ -15,10 +17,14 @@ virtual_tryon/frontend/.vite/
 virtual_tryon/frontend/playwright-report/
 virtual_tryon/frontend/test-results/
 virtual_tryon/frontend/blob-report/
+
+# Local environment and credentials
 .env
 .env.*
 
 # Runtime data
+Data_input/
+tmp/
 virtual_tryon/data/inputs/*
 virtual_tryon/data/outputs/*
 virtual_tryon/data/temp/*
@@ -26,8 +32,10 @@ virtual_tryon/data/temp/*
 !virtual_tryon/data/outputs/.gitkeep
 !virtual_tryon/data/temp/.gitkeep
 
+# Local reference files and hand-edited demo images
+/*.pdf
+/*.png
+
 # Model weights and third-party clones
 virtual_tryon/models/
 virtual_tryon/third_party/
-
-# Local references and setup helpers can be committed intentionally if desired.
